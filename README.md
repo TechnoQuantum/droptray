@@ -147,6 +147,11 @@ through, frosted. Choose *Clear* for more see-through, or *Mica* for a calmer wa
 
 <img src="docs/images/drawer-activity-light.png" width="360" alt="The drawer in light mode">
 
+## iPhone app (beta)
+
+A native SwiftUI app with a Share-sheet extension lives in [`ios/`](ios). It offers one-tap Paste (videos too),
+Bonjour discovery, QR pairing and Liquid Glass. Build it yourself with Xcode: see [ios/README.md](ios/README.md).
+
 ## Privacy and security
 
 - **Local only.** Nothing leaves your network. There's no account, server or telemetry.
