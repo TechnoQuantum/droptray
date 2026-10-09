@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>DropTray widget</title>
+<style>
+  :root { --ring: #64d2ff; --track: rgba(255,255,255,.14); --ask: #ff9f0a; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: rgba(20,20,26,.22); user-select: none; cursor: default; }
+  .tile { position: absolute; inset: 0; display: grid; place-items: center; }
+  .ring { position: absolute; inset: 5px; border-radius: 50%; opacity: 0; transition: opacity .3s;
+          background: conic-gradient(var(--ring) calc(var(--p, 0) * 1turn), var(--track) 0);
+          -webkit-mask: radial-gradient(circle, transparent 62%, #000 63%); mask: radial-gradient(circle, transparent 62%, #000 63%); }
+  body.busy .ring { opacity: 1; }
+  .mark { width: 34px; height: 34px; border-radius: 10px; position: relative; transition: transform .15s;
+          box-shadow: 0 6px 16px -6px rgba(10,132,255,.9), inset 0 1px 0 rgba(255,255,255,.4); }
+  body.busy .mark { transform: scale(.8); }
+  body:hover .mark { transform: scale(1.06); }
+  body.paused .mark { filter: grayscale(1) brightness(.8); }
+  .badge { position: absolute; top: 6px; right: 6px; min-width: 16px; height: 16px; padding: 0 4px; box-sizing: border-box;
+           border-radius: 8px; background: var(--ask); color: #fff; font: 700 10px/16px "Segoe UI", sans-serif; text-align: center;
+           box-shadow: 0 0 0 2px rgba(20,20,26,.6); display: none; }
+  body.ask .badge { display: block; animation: pulse 1.6s ease-in-out infinite; }
+  @keyframes pulse { 50% { transform: scale(1.18); } }
+  @media (prefers-reduced-motion: reduce) { .badge { animation: none !important; } }
+</style>
+</head>
+<body title="DropTray">
+<div class="tile">
+  <div class="ring"></div>
+  <svg class="mark" viewBox="0 0 34 34">
+    <defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#64d2ff"/><stop offset="1" stop-color="#0a84ff"/></linearGradient></defs>
+    <rect width="34" height="34" rx="10" fill="url(#g)"/>
+    <g fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" transform="translate(6 5.5) scale(.92)">
+      <path d="M12 3.5v11"/><path d="m7.5 10.5 4.5 4.5 4.5-4.5"/><path d="M4 15.5v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/>
+    </g>
+  </svg>
+  <div class="badge" id="badge"></div>
+</div>
+<script>
+const api = () => window.pywebview.api;
+// Press: Python decides between a drag (the button is still held) and a click.
+document.addEventListener("mousedown", (e) => { if (e.button === 0) api().widget_press(); });
+document.addEventListener("contextmenu", (e) => { e.preventDefault(); api().widget_press(); });
+async function tick() {
+  try {
+    const s = await api().widget_state();
+    document.body.className = s.state;
+    document.body.style.setProperty("--p", s.frac);
+    document.getElementById("badge").textContent = s.pending || "";
+    document.body.title = s.tip;
+    setTimeout(tick, s.state === "busy" || s.state === "ask" ? 400 : 1500);
+  } catch (e) { setTimeout(tick, 1500); }
+}
+window.addEventListener("pywebviewready", tick);
+</script>
+</body>
+</html>

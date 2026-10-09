@@ -1,0 +1,822 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>DropTray</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --ink: #f5f5f7; --ink2: rgba(235,235,245,.62); --ink3: rgba(235,235,245,.36);
+    --panel: rgba(255,255,255,.055); --panel2: rgba(255,255,255,.09); --stroke: rgba(255,255,255,.10);
+    --hi: rgba(255,255,255,.14); --shade: rgba(14,14,20,.30); --fill: rgba(118,118,128,.24); --pill: rgba(255,255,255,.17);
+    --blue: #0a84ff; --cyan: #64d2ff; --green: #30d158; --orange: #ff9f0a; --red: #ff453a;
+    --menu: rgba(40,40,46,.92);
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      color-scheme: light;
+      --ink: #1d1d1f; --ink2: rgba(60,60,67,.66); --ink3: rgba(60,60,67,.38);
+      --panel: rgba(255,255,255,.52); --panel2: rgba(255,255,255,.75); --stroke: rgba(0,0,0,.07);
+      --hi: rgba(255,255,255,.7); --shade: rgba(246,246,250,.30); --fill: rgba(118,118,128,.14); --pill: #ffffff;
+      --blue: #007aff; --cyan: #32ade6; --green: #34c759; --orange: #ff9500; --red: #ff3b30;
+      --menu: rgba(250,250,252,.95);
+    }
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body[data-glass="clear"] { --shade: rgba(12,12,16,.42); }
+  @media (prefers-color-scheme: light) { body[data-glass="clear"] { --shade: rgba(248,248,252,.5); } }
+  body[data-glass="clear"] .hdr h1, body[data-glass="clear"] .lens h2 { text-shadow: 0 1px 2px rgba(0,0,0,.35); }
+  html, body { height: 100%; overflow: hidden; }
+  body {
+    background: var(--shade); color: var(--ink); user-select: none; -webkit-user-select: none; cursor: default;
+    font: 13px/1.35 "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+    font-feature-settings: "tnum"; -webkit-font-smoothing: antialiased;
+  }
+  button { font: inherit; color: inherit; background: none; border: 0; cursor: default; }
+  :focus { outline: none; }
+  :focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; border-radius: 6px; }
+  svg { display: block; }
+  .app { height: 100%; display: flex; flex-direction: column; padding: 14px 14px 0; }
+
+  /* header */
+  .hdr { display: flex; align-items: center; gap: 10px; padding: 0 2px 12px; }
+  .hdr .mark { width: 30px; height: 30px; flex: none; }
+  .hdr .who { flex: 1; min-width: 0; }
+  .hdr h1 { font: 600 15px/1.15 "Segoe UI Variable Display", "Segoe UI", sans-serif; letter-spacing: -.1px; }
+  .status { font-size: 11.5px; color: var(--ink2); display: flex; align-items: center; gap: 6px; white-space: nowrap; overflow: hidden; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); flex: none; }
+  .dot.warn { background: var(--orange); } .dot.busy { background: var(--cyan); box-shadow: 0 0 0 3px rgba(100,210,255,.18); }
+  .icon-btn { width: 28px; height: 28px; border-radius: 7px; display: grid; place-items: center; color: var(--ink2); }
+  .icon-btn:hover { background: var(--fill); color: var(--ink); }
+  .icon-btn.on { color: var(--orange); }
+
+  /* segmented control */
+  .seg { display: flex; padding: 2px; border-radius: 8px; background: var(--fill); position: relative; }
+  .seg button { flex: 1; height: 24px; border-radius: 6px; font-size: 12px; font-weight: 500; color: var(--ink2); position: relative; z-index: 1; }
+  .seg button.on { color: var(--ink); }
+  .seg .thumb { position: absolute; top: 2px; bottom: 2px; border-radius: 6px; background: var(--pill);
+                box-shadow: 0 1px 3px rgba(0,0,0,.25), inset 0 .5px 0 var(--hi); transition: left .22s cubic-bezier(.3,.7,.2,1), width .22s; }
+  .seg .n { font-size: 10.5px; color: var(--ink3); margin-left: 4px; }
+  .seg .live { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--green); margin-left: 6px; vertical-align: 1px; }
+
+  main { flex: 1; min-height: 0; position: relative; margin-top: 12px; }
+  #tabs.hidden + main { margin-top: 0; }
+  .view { position: absolute; inset: 0; display: none; flex-direction: column; gap: 10px; padding-bottom: 14px; }
+  .view.on { display: flex; }
+  .scroll { overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--fill) transparent; }
+  .scroll::-webkit-scrollbar { width: 8px; } .scroll::-webkit-scrollbar-thumb { background: var(--fill); border-radius: 4px; border: 2px solid transparent; background-clip: padding-box; }
+
+  .panel { background: var(--panel); border: 1px solid var(--stroke); border-radius: 12px; box-shadow: inset 0 .5px 0 var(--hi); }
+  .ptitle { font-size: 11.5px; color: var(--ink2); font-weight: 500; display: flex; justify-content: space-between; align-items: baseline; }
+
+  /* the lens */
+  .lens { position: relative; flex: 1 1 auto; min-height: 196px; border-radius: 18px; overflow: hidden; background: var(--panel);
+          border: 1px solid var(--stroke); box-shadow: inset 0 1px 0 var(--hi), 0 10px 30px -18px rgba(0,0,0,.6); }
+  .lens::before { content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 2;
+                  background: radial-gradient(130% 70% at 15% -10%, rgba(255,255,255,.16), transparent 55%); }
+  .lens.compact { flex: none; min-height: 0; }
+  .lens.compact .body { position: relative; inset: auto; }
+  .blocks.grow { flex: 1 1 auto; }
+  .blocks.grow .feed { flex: 1; min-height: 0; overflow: hidden;
+                       -webkit-mask-image: linear-gradient(#000 calc(100% - 24px), transparent); mask-image: linear-gradient(#000 calc(100% - 24px), transparent); }
+  .today { font-size: 11.5px; color: var(--ink2); margin: 10px 0 12px; }
+  .qa { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .qbtn { display: flex; align-items: center; gap: 7px; height: 32px; padding: 0 10px; border-radius: 8px; font-size: 12px; font-weight: 500;
+          background: var(--panel2); border: 1px solid var(--stroke); box-shadow: inset 0 .5px 0 var(--hi); text-align: left; min-width: 0; }
+  .qbtn span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .qbtn svg { flex: none; color: var(--blue); }
+  .qbtn:hover { filter: brightness(1.15); }
+  .qbtn.primary { background: linear-gradient(180deg, color-mix(in srgb, var(--blue) 82%, white), var(--blue)); color: #fff; border-color: transparent; }
+  .qbtn.primary svg { color: #fff; }
+  .ev { height: 46px; }
+  .evicon { width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; flex: none; }
+  .stack { width: 30px; height: 30px; position: relative; flex: none; }
+  .stack img { position: absolute; width: 26px; height: 26px; border-radius: 6px; box-shadow: 0 0 0 1.5px rgba(0,0,0,.35); }
+  .stack img:nth-child(1) { left: 0; top: 0; } .stack img:nth-child(2) { left: 4px; top: 4px; } .stack img:nth-child(3) { left: 8px; top: 8px; }
+  .lens.ask { border-color: color-mix(in srgb, var(--orange) 55%, transparent); }
+  .lens .body { position: absolute; inset: 0; z-index: 3; padding: 16px 18px; display: flex; flex-direction: column; }
+  .liquid { position: absolute; left: 0; right: 0; bottom: 0; height: 0; z-index: 1;
+            background: linear-gradient(180deg, color-mix(in srgb, var(--cyan) 55%, transparent), color-mix(in srgb, var(--blue) 62%, transparent));
+            transition: height .7s cubic-bezier(.2,.8,.2,1); }
+  .liquid svg { position: absolute; left: 0; top: -9px; width: 200%; height: 10px; animation: wave 2.6s linear infinite; }
+  .liquid svg path { fill: color-mix(in srgb, var(--cyan) 55%, transparent); }
+  .liquid.still svg { animation-play-state: paused; }
+  @keyframes wave { to { transform: translateX(-50%); } }
+  @media (prefers-reduced-motion: reduce) { .liquid svg { animation: none; } .liquid { transition: none; } .seg .thumb { transition: none; } }
+
+  .glyph { width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; color: #fff; flex: none;
+           background: linear-gradient(160deg, var(--cyan), var(--blue)); box-shadow: 0 6px 18px -8px var(--blue), inset 0 1px 0 rgba(255,255,255,.4); }
+  .glyph.paused { background: linear-gradient(160deg, #8e8e93, #636366); box-shadow: none; }
+  .strip { display: flex; gap: 6px; }
+  .tile { padding: 0; border-radius: 9px; flex: none; }
+  .tile .thumbimg { width: 46px; height: 46px; border-radius: 9px; box-shadow: 0 0 0 1px var(--stroke); }
+  .tile:hover .thumbimg { box-shadow: 0 0 0 2px var(--blue); }
+  .tile.more { width: 46px; height: 46px; display: grid; place-items: center; background: var(--fill); color: var(--ink2); font-weight: 600; }
+  .clipcard { flex: none; display: flex; align-items: center; gap: 10px; padding: 8px; border-radius: 10px;
+              background: color-mix(in srgb, var(--blue) 12%, transparent); border: 1px solid color-mix(in srgb, var(--blue) 30%, transparent); }
+  .clipcard .thumbs { display: flex; flex: none; }
+  .clipcard .thumbs > * { margin-left: -14px; box-shadow: 0 0 0 2px rgba(0,0,0,.25); }
+  .clipcard .thumbs > *:first-child { margin-left: 0; }
+  .big { font: 600 40px/1 "Segoe UI Variable Display", "Segoe UI", sans-serif; letter-spacing: -1px; }
+  .lens h2.t { font: 600 15px/1.25 "Segoe UI Variable Display", "Segoe UI", sans-serif; }
+  .lens .sub { color: var(--ink2); }
+  .lens .row { display: flex; align-items: center; gap: 8px; }
+  .lens .spacer { flex: 1; }
+  .file-now { font-size: 12px; color: var(--ink2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pager { font-size: 11px; color: var(--ink3); }
+  .chips { display: flex; gap: 5px; margin-top: 12px; flex-wrap: nowrap; overflow: hidden; }
+  .kchip { width: 30px; height: 30px; border-radius: 7px; flex: none; display: grid; place-items: center; font-size: 8.5px; font-weight: 700; }
+
+  .btn { height: 28px; padding: 0 12px; border-radius: 7px; font-weight: 500; background: var(--panel2); border: 1px solid var(--stroke);
+         box-shadow: inset 0 .5px 0 var(--hi); white-space: nowrap; }
+  .btn:hover { filter: brightness(1.12); }
+  .btn.primary { background: linear-gradient(180deg, color-mix(in srgb, var(--blue) 82%, white), var(--blue)); color: #fff; border-color: transparent; }
+  .btn.danger { color: var(--red); }
+  .btn.small { height: 24px; padding: 0 9px; font-size: 12px; }
+  .btn:disabled { opacity: .45; }
+
+  /* activity blocks */
+  .blocks { display: flex; flex-direction: column; gap: 10px; min-height: 0; }
+  .block { padding: 10px 12px; }
+  .spark { height: 64px; width: 100%; margin-top: 6px; }
+  .totals { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); padding: 10px 4px; }
+  .totals div { text-align: center; padding: 0 2px; border-left: 1px solid var(--stroke); }
+  .totals div:first-child { border-left: 0; }
+  .totals b { display: block; font: 600 14.5px/1.2 "Segoe UI Variable Display", "Segoe UI", sans-serif; white-space: nowrap; }
+  .totals span { font-size: 10.5px; color: var(--ink2); }
+  .conn { font-size: 12px; color: var(--ink2); display: grid; gap: 2px; margin-top: 4px; }
+  .conn b { color: var(--ink); font-weight: 500; }
+
+  /* rows */
+  .item { display: flex; align-items: center; gap: 10px; padding: 0 8px; border-radius: 8px; height: 50px; position: relative; }
+  .item:hover { background: var(--fill); }
+  .thumbimg { width: 36px; height: 36px; border-radius: 7px; object-fit: cover; flex: none; background: var(--fill); }
+  .info { flex: 1; min-width: 0; }
+  .name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .meta { font-size: 11.5px; color: var(--ink2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .meta.bad { color: var(--red); } .meta.dim { color: var(--ink3); }
+  .acts { display: none; gap: 2px; }
+  .item:hover .acts { display: flex; }
+  .time { font-size: 11px; color: var(--ink3); }
+  .item:hover .time { display: none; }
+
+  /* history */
+  .search { display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 9px; border-radius: 8px; background: var(--fill); color: var(--ink2); flex: none; }
+  .search input { flex: 1; min-width: 0; background: none; border: 0; color: var(--ink); font: inherit; outline: none; }
+  .filters { display: flex; gap: 6px; flex: none; align-items: center; }
+  .chip { height: 24px; padding: 0 10px; border-radius: 12px; font-size: 12px; color: var(--ink2); border: 1px solid var(--stroke); }
+  .chip.on { background: var(--blue); border-color: var(--blue); color: #fff; }
+  .vlist { flex: 1; min-height: 0; position: relative; margin: 0 -6px; padding: 0 6px; }
+  .vlist .spacer { position: relative; }
+  .vlist .item, .vlist .day { position: absolute; left: 0; right: 0; }
+  .day { height: 30px; display: flex; align-items: flex-end; padding: 0 8px 6px; font-size: 11.5px; font-weight: 600; color: var(--ink2); }
+  .empty { margin: auto; text-align: center; color: var(--ink2); max-width: 260px; display: grid; gap: 6px; justify-items: center; }
+  .empty h3 { color: var(--ink); font-size: 14px; font-weight: 600; }
+
+  /* phone */
+  .devices { display: flex; gap: 8px; overflow-x: auto; flex: none; padding-bottom: 2px; scrollbar-width: none; }
+  .dev { flex: none; display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 12px 0 8px; border-radius: 20px;
+         background: var(--panel); border: 1px solid var(--stroke); box-shadow: inset 0 .5px 0 var(--hi); }
+  .dev .ph { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; background: var(--fill); color: var(--ink2); position: relative; }
+  .dev.online .ph { color: var(--green); }
+  .dev.online .ph::after { content: ""; position: absolute; right: -1px; bottom: -1px; width: 8px; height: 8px; border-radius: 50%; background: var(--green); border: 2px solid #2a2a30; }
+  .dev .n { font-weight: 500; max-width: 110px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .dev .s { font-size: 10.5px; color: var(--ink2); }
+  .dev.add { padding: 0 14px; color: var(--blue); font-weight: 500; gap: 6px; }
+  .pbox { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 10px; gap: 8px; }
+  .drop { flex: none; height: 52px; border-radius: 10px; border: 1.5px dashed var(--stroke); display: flex; align-items: center; justify-content: center;
+          gap: 8px; color: var(--ink2); }
+  .drop:hover, body.dragging .drop { border-color: var(--blue); color: var(--blue); background: color-mix(in srgb, var(--blue) 10%, transparent); }
+  .prow { display: flex; align-items: center; gap: 8px; flex: none; font-size: 12px; color: var(--ink2); }
+  .plist { flex: 1; min-height: 0; margin: 0 -4px; padding: 0 4px; }
+  .text-item { height: auto; min-height: 50px; padding: 8px; align-items: flex-start; }
+  .text-item .name { white-space: normal; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; word-break: break-word; }
+  .text-item .name.link { color: var(--blue); }
+
+  /* toggle */
+  .tog { width: 32px; height: 19px; border-radius: 10px; background: var(--fill); position: relative; flex: none; transition: background .18s; }
+  .tog::after { content: ""; position: absolute; top: 2px; left: 2px; width: 15px; height: 15px; border-radius: 50%; background: #fff;
+                box-shadow: 0 1px 2px rgba(0,0,0,.3); transition: transform .18s; }
+  .tog.on { background: var(--green); }
+  .tog.on::after { transform: translateX(13px); }
+
+  /* settings */
+  .back { display: flex; align-items: center; gap: 4px; color: var(--blue); font-weight: 500; flex: none; height: 24px; }
+  .group-title { font-size: 11.5px; color: var(--ink2); font-weight: 600; padding: 12px 10px 6px; }
+  .group { background: var(--panel); border: 1px solid var(--stroke); border-radius: 10px; }
+  .srow { display: flex; align-items: center; gap: 10px; min-height: 38px; padding: 6px 10px; border-top: 1px solid var(--stroke); }
+  .srow:first-child { border-top: 0; }
+  .srow .l { flex: 1; min-width: 0; }
+  .srow .hint { font-size: 11px; color: var(--ink2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  select, .field { font: inherit; color: var(--ink); background: var(--panel2); border: 1px solid var(--stroke); border-radius: 6px; height: 24px; padding: 0 6px; }
+  .field { width: 130px; user-select: text; }
+  .field.code { width: 92px; text-transform: uppercase; letter-spacing: 1px; font-weight: 600; }
+  .sfoot { display: flex; gap: 8px; justify-content: space-between; padding: 14px 0 4px; }
+
+  /* sheets, menus, toast */
+  .scrim { position: fixed; inset: 0; background: rgba(0,0,0,.28); display: none; z-index: 20; align-items: flex-end; }
+  .scrim.on { display: flex; }
+  .sheet { width: 100%; margin: 10px; padding: 18px; border-radius: 16px; background: var(--menu); border: 1px solid var(--stroke);
+           box-shadow: 0 20px 50px -10px rgba(0,0,0,.6), inset 0 1px 0 var(--hi); backdrop-filter: blur(30px) saturate(1.6);
+           animation: rise .22s cubic-bezier(.2,.8,.2,1); }
+  @keyframes rise { from { transform: translateY(16px); opacity: 0; } }
+  .sheet h3 { font: 600 15px/1.25 "Segoe UI Variable Display", "Segoe UI", sans-serif; }
+  .sheet p { color: var(--ink2); margin-top: 4px; }
+  .sheet .btns { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+  .qr { display: flex; gap: 14px; margin-top: 14px; align-items: center; }
+  .qr img { width: 132px; height: 132px; border-radius: 10px; background: #fff; padding: 6px; image-rendering: pixelated; flex: none; }
+  .qr .addr { font-weight: 600; color: var(--blue); word-break: break-all; user-select: text; }
+  .qr .code { font: 600 22px/1 "Segoe UI Variable Display", "Segoe UI", sans-serif; letter-spacing: 3px; margin-top: 4px; user-select: text; }
+  .menu { position: fixed; z-index: 30; min-width: 180px; padding: 5px; border-radius: 9px; background: var(--menu); border: 1px solid var(--stroke);
+          box-shadow: 0 12px 30px -6px rgba(0,0,0,.5); backdrop-filter: blur(30px); display: none; }
+  .menu.on { display: block; }
+  .menu button { display: block; width: 100%; text-align: left; height: 26px; padding: 0 10px; border-radius: 5px; }
+  .menu button:hover { background: var(--blue); color: #fff; }
+  .menu hr { border: 0; border-top: 1px solid var(--stroke); margin: 4px 6px; }
+  .menu .danger { color: var(--red); }
+  .toast { position: fixed; left: 50%; bottom: 18px; transform: translate(-50%, 10px); opacity: 0; z-index: 40; pointer-events: none;
+           padding: 8px 14px; border-radius: 18px; background: var(--menu); border: 1px solid var(--stroke); font-weight: 500;
+           box-shadow: 0 10px 30px -10px rgba(0,0,0,.6); transition: .2s; white-space: nowrap; }
+  .toast.on { opacity: 1; transform: translate(-50%, 0); }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <linearGradient id="g-mark" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#64d2ff"/><stop offset="1" stop-color="#0a84ff"/></linearGradient>
+    <symbol id="i-pause" viewBox="0 0 24 24"><path d="M8 5v14M16 5v14" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5.5v13l10.5-6.5z" fill="currentColor"/></symbol>
+    <symbol id="i-gear" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.8v2.4M12 18.8v2.4M21.2 12h-2.4M5.2 12H2.8M18.5 5.5l-1.7 1.7M7.2 16.8l-1.7 1.7M18.5 18.5l-1.7-1.7M7.2 7.2 5.5 5.5" stroke-linecap="round"/><circle cx="12" cy="12" r="6.6"/></g></symbol>
+    <symbol id="i-in" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5v11"/><path d="m7.5 10.5 4.5 4.5 4.5-4.5"/><path d="M4 15.5v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></g></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M7 7l10 10M17 7 7 17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+    <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2h7a2 2 0 0 1 2 2v7.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></symbol>
+    <symbol id="i-open" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6M20 4l-8.5 8.5"/><path d="M18 14v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4"/></g></symbol>
+    <symbol id="i-more" viewBox="0 0 24 24"><g fill="currentColor"><circle cx="6" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="18" cy="12" r="1.7"/></g></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6"/><path d="m15 15 5 5"/></g></symbol>
+    <symbol id="i-phone" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.8"><rect x="6.5" y="2.8" width="11" height="18.4" rx="2.6"/><path d="M10.5 18h3" stroke-linecap="round"/></g></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.7"><rect x="8.5" y="8.5" width="11" height="11" rx="2"/><path d="M15.5 8.5v-2a2 2 0 0 0-2-2h-7a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h2"/></g></symbol>
+    <symbol id="i-link" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></g></symbol>
+    <symbol id="i-clip" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.7"><rect x="5.5" y="4.5" width="13" height="16" rx="2"/><path d="M9 4.5V3.8a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v.7" /></g></symbol>
+    <symbol id="i-up" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15.5v-11"/><path d="m7.5 9 4.5-4.5L16.5 9"/><path d="M4 15.5v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></g></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-qr" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3.5" y="3.5" width="6.5" height="6.5" rx="1"/><rect x="14" y="3.5" width="6.5" height="6.5" rx="1"/><rect x="3.5" y="14" width="6.5" height="6.5" rx="1"/><path d="M14 14h2.5v2.5H14zM18 18h2.5v2.5H18zM14 19h2M19 14v2" /></g></symbol>
+    <symbol id="i-back" viewBox="0 0 24 24"><path d="m14.5 5.5-6.5 6.5 6.5 6.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  </defs>
+</svg>
+
+<div class="app">
+  <header class="hdr">
+    <svg class="mark" viewBox="0 0 30 30"><rect width="30" height="30" rx="8" fill="url(#g-mark)"/><use href="#i-in" x="6" y="5.5" width="18" height="18" color="#fff"/></svg>
+    <div class="who">
+      <h1 id="pcName">DropTray</h1>
+      <div class="status"><i class="dot" id="dot"></i><span id="statusText">Starting</span></div>
+    </div>
+    <button class="icon-btn" id="pauseBtn" title="Pause receiving"><svg width="16" height="16"><use href="#i-pause"/></svg></button>
+    <button class="icon-btn" id="gearBtn" title="Settings"><svg width="17" height="17"><use href="#i-gear"/></svg></button>
+  </header>
+
+  <nav class="seg" id="tabs">
+    <span class="thumb" id="segThumb"></span>
+    <button data-v="activity" class="on">Activity</button>
+    <button data-v="history">History</button>
+    <button data-v="phone">Phone<span class="n" id="phoneN"></span></button>
+  </nav>
+
+  <main>
+    <!-- Activity: a fixed layout, nothing to scroll -->
+    <section class="view on" id="v-activity">
+      <div class="lens" id="lens">
+        <div class="liquid hidden" id="liquid"><svg viewBox="0 0 200 10" preserveAspectRatio="none"><path d="M0 5 Q 12.5 0 25 5 T 50 5 T 75 5 T 100 5 T 125 5 T 150 5 T 175 5 T 200 5 V10 H0z"/></svg></div>
+        <div class="body" id="lensBody"></div>
+      </div>
+      <div class="blocks" id="blocks">
+        <div class="panel block" data-b="throughput">
+          <div class="ptitle"><span>Throughput</span><span id="speedNow"></span></div>
+          <canvas class="spark" id="spark"></canvas>
+        </div>
+        <div class="panel totals" data-b="totals">
+          <div><b id="tFiles">0</b><span>Files</span></div>
+          <div><b id="tBytes">0 B</b><span>Received</span></div>
+          <div><b id="tAvg">–</b><span>Average</span></div>
+          <div><b id="tPeak">–</b><span>Peak</span></div>
+        </div>
+        <div class="panel block feed" data-b="recent" style="padding:8px 4px 4px">
+          <div class="ptitle" style="padding:0 8px 4px"><span>Recent activity</span><button class="btn small" id="recentAll" style="height:20px">History</button></div>
+          <div id="recent"></div>
+        </div>
+        <div class="panel block" data-b="connection">
+          <div class="ptitle"><span>Connection</span></div>
+          <div class="conn"><div>PC link <b id="cLink"></b></div><div id="cTest"></div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- History: the only long list; rows are virtualized -->
+    <section class="view" id="v-history">
+      <label class="search"><svg width="14" height="14"><use href="#i-search"/></svg><input id="q" placeholder="Search received files" spellcheck="false"></label>
+      <div class="filters" id="filters">
+        <button class="chip on" data-f="all">All</button><button class="chip" data-f="image">Photos</button>
+        <button class="chip" data-f="video">Videos</button><button class="chip" data-f="file">Files</button>
+        <span style="flex:1"></span>
+        <button class="icon-btn" id="openFolder" title="Open received folder"><svg width="16" height="16"><use href="#i-folder"/></svg></button>
+      </div>
+      <div class="vlist scroll" id="vlist"><div class="spacer" id="vspacer"></div></div>
+      <div class="empty hidden" id="hEmpty"><h3>Nothing received yet</h3><p>Files your phone sends show up here. Click one to open it.</p></div>
+    </section>
+
+    <!-- Phone -->
+    <section class="view" id="v-phone">
+      <div class="devices" id="devices"></div>
+      <nav class="seg" id="psub">
+        <span class="thumb"></span>
+        <button data-p="to" class="on">To phone<span class="n" id="toN"></span></button>
+        <button data-p="from">From phone<span class="n" id="fromN"></span></button>
+      </nav>
+      <div class="panel pbox" id="p-to">
+        <div class="clipcard hidden" id="clipCard">
+          <div class="thumbs" id="clipThumbs"></div>
+          <div class="info"><div class="name" id="clipLabel"></div><div class="meta" id="clipSub"></div></div>
+          <button class="btn primary small" id="sendClip">Send</button>
+          <button class="icon-btn" id="dismissClip" title="Don't send this"><svg width="13" height="13"><use href="#i-x"/></svg></button>
+        </div>
+        <button class="drop" id="drop"><svg width="16" height="16"><use href="#i-plus"/></svg>Drop files here, or click to choose</button>
+        <div class="prow" title="The phone page shows what you copy on this PC, and Paste from PC works">
+          <svg width="14" height="14"><use href="#i-clip"/></svg><span style="flex:1">Phone can see what I copy</span><i class="tog" id="tSync" role="switch" tabindex="0"></i>
+        </div>
+        <div class="plist scroll" id="toList"></div>
+      </div>
+      <div class="panel pbox hidden" id="p-from">
+        <div class="prow"><span style="flex:1">Text and links your phone sent</span>Copy automatically<i class="tog" id="tCopy" role="switch" tabindex="0"></i></div>
+        <div class="plist scroll" id="fromList"></div>
+      </div>
+    </section>
+
+    <!-- Settings -->
+    <section class="view" id="v-settings">
+      <button class="back" id="backBtn"><svg width="15" height="15"><use href="#i-back"/></svg>Done</button>
+      <div class="scroll" style="flex:1;min-height:0;margin:0 -4px;padding:0 4px">
+        <div class="group-title">Receiving</div>
+        <div class="group">
+          <div class="srow"><div class="l">Ask before receiving<div class="hint">Accept or decline each batch</div></div><i class="tog" data-s="ask"></i></div>
+          <div class="srow"><div class="l">Convert HEIC photos to JPG</div><i class="tog" data-s="convert_heic"></i></div>
+          <div class="srow"><div class="l">Save to<div class="hint" id="saveDir"></div></div><button class="btn small" id="chooseDir">Change</button></div>
+        </div>
+        <div class="group-title">Clipboard</div>
+        <div class="group">
+          <div class="srow"><div class="l">Copy text from the phone</div><i class="tog" data-s="auto_copy"></i></div>
+          <div class="srow"><div class="l">Sync PC clipboard to the phone<div class="hint">Everything you copy appears under From PC</div></div><i class="tog" data-s="clip_sync"></i></div>
+        </div>
+        <div class="group-title">Activity panel</div>
+        <div class="group" id="blockRows"></div>
+        <div class="group-title">This PC</div>
+        <div class="group">
+          <div class="srow"><div class="l">Name<div class="hint">Phones see this</div></div><input class="field" id="fName" maxlength="40" spellcheck="false"></div>
+          <div class="srow"><div class="l">Pairing code<div class="hint" id="codeHint">Same code on two PCs lets one Shortcut work with both</div></div>
+            <input class="field code" id="fCode" maxlength="12" spellcheck="false"><button class="btn small" id="newCode">New</button></div>
+        </div>
+        <div class="group-title">General</div>
+        <div class="group">
+          <div class="srow"><div class="l">Window glass<div class="hint">Clear lets the desktop show through</div></div>
+            <select id="glassSel"><option value="frosted">Frosted</option><option value="clear">Clear</option><option value="mica">Mica</option></select></div>
+          <div class="srow"><div class="l">Open at sign-in</div><i class="tog" data-s="startup"></i></div>
+          <div class="srow"><div class="l">Stay open when clicking elsewhere</div><i class="tog" data-s="keep_open"></i></div>
+          <div class="srow"><div class="l">Desktop widget<div class="hint">A small tile on the desktop that opens DropTray. Drag it anywhere</div></div><i class="tog" data-s="widget"></i></div>
+          <div class="srow" id="atRow"><div class="l">Open the drawer<div class="hint">From the tray icon and the widget alike</div></div>
+            <select id="drawerAt"><option value="tray">Above the tray</option><option value="widget">Next to the widget</option></select></div>
+        </div>
+        <div class="sfoot"><button class="btn danger small" id="clearHist">Clear history</button><button class="btn small" id="quitBtn">Quit DropTray</button></div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div class="scrim" id="scrim"><div class="sheet" id="sheet"></div></div>
+<div class="menu" id="menu"></div>
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const api = () => window.pywebview.api;
+const KCOL = { image: "#bf5af2", video: "#ff375f", audio: "#ff9f0a", doc: "#0a84ff", archive: "#ffd60a", other: "#8e8e93" };
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const ext = (n) => (n.includes(".") ? n.split(".").pop() : "file").toUpperCase().slice(0, 4);
+let S = null, view = "activity", shown = true, histVer = -1, phoneVer = -1, promptIdx = 0, psub = "to";
+
+function toast(t) { const el = $("toast"); el.textContent = t; el.classList.add("on"); clearTimeout(el.t); el.t = setTimeout(() => el.classList.remove("on"), 1800); }
+function thumbEl(kind, name, url, size = 36) {
+  if (url) return `<img class="thumbimg" style="width:${size}px;height:${size}px" src="${esc(url)}" loading="lazy" decoding="async" alt="">`;
+  const c = KCOL[kind] || KCOL.other;
+  return `<div class="thumbimg kchip" style="width:${size}px;height:${size}px;color:${c};background:color-mix(in srgb, ${c} 20%, transparent)">${esc(ext(name))}</div>`;
+}
+function setToggle(el, on) { el.classList.toggle("on", !!on); el.setAttribute("aria-checked", on ? "true" : "false"); }
+
+// ---------- segmented controls
+function segMove(nav) {
+  const on = nav.querySelector("button.on"), th = nav.querySelector(".thumb");
+  if (on && th) { th.style.left = on.offsetLeft + "px"; th.style.width = on.offsetWidth + "px"; }
+}
+function go(v) {
+  if (!v) return;
+  view = v;
+  document.querySelectorAll(".view").forEach((s) => s.classList.toggle("on", s.id === "v-" + v));
+  document.querySelectorAll("#tabs button").forEach((b) => b.classList.toggle("on", b.dataset.v === v));
+  $("tabs").classList.toggle("hidden", v === "settings");
+  segMove($("tabs"));
+  if (v === "history") loadHistory(true);
+  if (v === "phone") { loadPhone(true); segMove($("psub")); }
+  if (v === "settings") renderSettings();
+}
+document.querySelectorAll("#tabs button").forEach((b) => b.onclick = () => go(b.dataset.v));
+document.querySelectorAll("#psub button").forEach((b) => b.onclick = () => {
+  psub = b.dataset.p;
+  document.querySelectorAll("#psub button").forEach((x) => x.classList.toggle("on", x === b));
+  $("p-to").classList.toggle("hidden", psub !== "to"); $("p-from").classList.toggle("hidden", psub !== "from");
+  segMove($("psub"));
+});
+$("gearBtn").onclick = () => go(view === "settings" ? "activity" : "settings");
+$("backBtn").onclick = () => go("activity");
+$("pauseBtn").onclick = () => api().pause().then(tick);
+
+// ---------- the lens
+let lensKey = "";
+function renderLens() {
+  const lens = $("lens"), body = $("lensBody"), liq = $("liquid");
+  const p = S.prompts, b = S.batches;
+  if (p.length || b.length) { lens.classList.remove("compact"); $("blocks").classList.remove("grow"); }
+  if (p.length) {
+    promptIdx = Math.min(promptIdx, p.length - 1);
+    const q = p[promptIdx];
+    lens.classList.add("ask"); liq.classList.add("hidden");
+    const key = "p" + q.id + p.length;
+    if (key === lensKey) return;
+    lensKey = key;
+    body.className = "body";
+    const chips = q.files.map((f) => thumbEl(f.kind, f.name, "", 30)).join("") + (q.more ? `<div class="kchip" style="color:var(--ink2);background:var(--fill)">+${q.more}</div>` : "");
+    body.innerHTML = `
+      <div class="row"><h2 class="t" style="flex:1">${esc(q.title)}</h2>${p.length > 1 ? `<button class="btn small" id="nextP">${promptIdx + 1} of ${p.length}</button>` : ""}</div>
+      <div class="sub" style="margin-top:3px">${esc(q.lines.join(" "))}</div>
+      ${q.pairing ? `<div class="sub" style="margin-top:8px">Pairing lets this device send files and text to ${esc(S.pc.name)}.</div>` : `<div class="chips">${chips}</div>`}
+      <div class="spacer"></div>
+      <div class="row">
+        <button class="btn danger" data-c="decline">Decline</button><span class="spacer"></span>
+        ${q.pairing ? "" : `<button class="btn" data-c="trust">Allow 5 min</button>`}
+        <button class="btn primary" data-c="accept">${q.pairing ? "Pair" : "Accept"}</button>
+      </div>`;
+    body.querySelectorAll("[data-c]").forEach((x) => x.onclick = () => { api().decide(q.id, x.dataset.c); lensKey = ""; });
+    const n = $("nextP"); if (n) n.onclick = () => { promptIdx = (promptIdx + 1) % p.length; lensKey = ""; renderLens(); };
+    return;
+  }
+  lens.classList.remove("ask");
+  if (b.length) {
+    const x = b[0];
+    liq.classList.remove("hidden");
+    liq.style.height = Math.max(4, x.frac * 100) + "%";
+    liq.classList.toggle("still", !S.speed);
+    const key = "b" + x.id;
+    if (key !== lensKey) {
+      lensKey = key;
+      body.className = "body";
+      body.innerHTML = `
+        <div class="row"><span class="sub" id="bFrom" style="flex:1"></span><button class="icon-btn" id="bCancel" title="Stop receiving the rest"><svg width="14" height="14"><use href="#i-x"/></svg></button></div>
+        <div class="row" style="align-items:flex-end;margin-top:6px"><span class="big" id="bPct"></span><span class="spacer"></span><span class="sub" id="bCount" style="padding-bottom:4px"></span></div>
+        <div class="spacer"></div>
+        <div style="font-weight:500" id="bBytes"></div>
+        <div class="sub" id="bSpeed"></div>
+        <div class="file-now" id="bFile" style="margin-top:6px"></div>`;
+      $("bCancel").onclick = () => api().cancel_batch(x.id);
+    }
+    $("bFrom").textContent = "From " + x.sender + (b.length > 1 ? `, ${b.length - 1} more batch${b.length > 2 ? "es" : ""} waiting` : "");
+    $("bPct").textContent = Math.floor(x.frac * 100) + "%";
+    $("bCount").textContent = x.files > 1 ? `${x.index} of ${x.files} files` : "1 file";
+    $("bBytes").textContent = x.total ? `${x.done} of ${x.total}` : x.done;
+    $("bSpeed").textContent = [x.speed, x.eta].filter(Boolean).join(", ");
+    $("bFile").textContent = x.current ? x.current : "Waiting for the next file";
+    return;
+  }
+  liq.classList.add("hidden"); liq.style.height = "0";
+  lens.classList.add("compact"); $("blocks").classList.add("grow");
+  const online = S.devices.filter((d) => d.online).map((d) => d.name);
+  const key = "i" + S.paused + online.join() + S.devices.length + S.today + (S.clip ? S.clip.seq + S.clip.label : "");
+  if (key === lensKey) return;
+  lensKey = key;
+  const sub = S.paused ? "Phones are turned away until you resume"
+    : !S.devices.length ? "Pair your iPhone to start"
+    : online.length ? `${online.join(" and ")} ${online.length > 1 ? "are" : "is"} connected`
+    : "Send from the DropTray page or the Share sheet";
+  const acts = [];
+  if (S.paused) acts.push(["resume", "play", "Resume receiving", "primary"]);
+  if (S.clip) acts.push(["clip", "clip", "Send copied " + (S.clip.kind === "files" ? (S.clip.label.endsWith("files") ? "files" : "file") : S.clip.kind === "image" ? "image" : "text"), S.paused ? "" : "primary"]);
+  acts.push(["pick", "up", "Send files to phone", ""]);
+  acts.push(["folder", "folder", "Open received folder", ""]);
+  acts.push(["pair", S.devices.length ? "qr" : "phone", S.devices.length ? "Show pairing QR" : "Pair a phone", S.devices.length ? "" : "primary"]);
+  body.className = "body";
+  body.innerHTML = `
+    <div class="row"><div class="glyph ${S.paused ? "paused" : ""}"><svg width="19" height="19"><use href="#i-${S.paused ? "pause" : "in"}"/></svg></div>
+      <div style="flex:1;min-width:0"><h2 class="t">${S.paused ? "Receiving is paused" : "Ready to receive"}</h2><div class="sub">${esc(sub)}</div></div></div>
+    <div class="today">${esc(S.today)}</div>
+    <div class="qa">${acts.slice(0, 4).map(([k, ic, label, cls]) => `<button class="qbtn ${cls}" data-qa="${k}"><svg width="15" height="15"><use href="#i-${ic}"/></svg><span>${esc(label)}</span></button>`).join("")}</div>`;
+  body.querySelectorAll("[data-qa]").forEach((b) => b.onclick = () => ({
+    resume: () => api().pause().then(tick),
+    clip: () => api().send_clip().then((w) => { toast(w ? `Sent ${w} to the phone` : "Nothing to send"); tick(); }),
+    pick: () => api().pick_share().then((n) => { if (n) { toast(`Shared ${n} file${n > 1 ? "s" : ""}`); tick(); } }),
+    folder: () => api().open_folder(),
+    pair: openPair,
+  })[b.dataset.qa]());
+}
+
+// ---------- activity blocks
+function renderBlocks() {
+  const busy = S.busy;
+  document.querySelectorAll("#blocks [data-b]").forEach((el) => {
+    const m = S.settings.blocks[el.dataset.b];
+    el.classList.toggle("hidden", !(m === "always" || (m === "busy" && busy) || (m === "idle" && !busy)));
+  });
+  $("tFiles").textContent = S.totals.files; $("tBytes").textContent = S.totals.bytes;
+  $("tAvg").textContent = S.totals.avg; $("tPeak").textContent = S.totals.peak;
+  $("speedNow").textContent = S.speed;
+  $("cLink").textContent = S.pc.link;
+  $("cTest").textContent = S.speedtest ? `Phone test ${S.speedtest.up} up and ${S.speedtest.down} down Mbps, ping ${S.speedtest.ping} ms (${S.speedtest.when})` : "Run the speed test on the phone page to measure Wi-Fi.";
+  const rk = JSON.stringify(S.events);
+  if (rk !== renderBlocks.rk) {
+    renderBlocks.rk = rk;
+    $("recent").innerHTML = S.events.length ? S.events.map((e, i) => {
+      const [ic, col] = EV[e.kind] || ["in", "var(--blue)"];
+      const lead = e.thumbs.length
+        ? `<div class="stack">${e.thumbs.slice(0, 3).map((t) => `<img class="thumbimg" src="${esc(t)}" alt="">`).join("")}</div>`
+        : `<div class="evicon" style="color:${col};background:color-mix(in srgb, ${col} 18%, transparent)"><svg width="15" height="15"><use href="#i-${ic}"/></svg></div>`;
+      return `<div class="item ev" data-i="${i}">${lead}<div class="info"><div class="name">${esc(e.title)}</div>
+        <div class="meta">${esc(e.sub)}</div></div><span class="time">${esc(e.ago)}</span></div>`;
+    }).join("") : `<div class="meta" style="padding:6px 8px 8px">Nothing has happened yet. Transfers, text from your phone and things you share show up here.</div>`;
+    $("recent").querySelectorAll(".ev").forEach((el) => el.onclick = () => {
+      const e = S.events[+el.dataset.i];
+      if (e.path) api().open_path(e.path);
+      else if (e.link) api().open_url(e.link);
+      else go(e.kind === "received" || e.kind === "declined" ? "history" : "phone");
+    });
+  }
+  drawSpark();
+}
+$("recentAll").onclick = () => go("history");
+const EV = { received: ["in", "var(--blue)"], text: ["link", "var(--cyan)"], sent: ["up", "#bf5af2"],
+             downloaded: ["check", "var(--green)"], paired: ["phone", "var(--green)"], declined: ["x", "var(--red)"] };
+
+function drawSpark() {
+  const cv = $("spark");
+  if (cv.offsetParent === null) return;
+  const dpr = devicePixelRatio || 1, w = cv.clientWidth, h = cv.clientHeight;
+  if (cv.width !== w * dpr) { cv.width = w * dpr; cv.height = h * dpr; }
+  const c = cv.getContext("2d"); c.setTransform(dpr, 0, 0, dpr, 0, 0); c.clearRect(0, 0, w, h);
+  const s = S.samples, css = getComputedStyle(document.documentElement);
+  const blue = css.getPropertyValue("--blue").trim(), cyan = css.getPropertyValue("--cyan").trim();
+  c.strokeStyle = css.getPropertyValue("--stroke").trim(); c.lineWidth = 1;
+  c.beginPath(); c.moveTo(0, h - .5); c.lineTo(w, h - .5); c.stroke();
+  if (s.length < 2) { c.fillStyle = css.getPropertyValue("--ink3").trim(); c.font = "11px Segoe UI"; c.textAlign = "center"; c.fillText("Waiting for data", w / 2, h / 2 + 4); return; }
+  const top = Math.max(...s) * 1.15 || 1, n = s.length, x = (i) => (w * i) / (n - 1), y = (v) => h - 2 - ((h - 8) * v) / top;
+  const path = new Path2D(); path.moveTo(0, y(s[0]));
+  for (let i = 1; i < n; i++) { const xm = (x(i - 1) + x(i)) / 2; path.bezierCurveTo(xm, y(s[i - 1]), xm, y(s[i]), x(i), y(s[i])); }
+  const area = new Path2D(path); area.lineTo(w, h); area.lineTo(0, h); area.closePath();
+  const gf = c.createLinearGradient(0, 0, 0, h); gf.addColorStop(0, cyan + "55"); gf.addColorStop(1, cyan + "00");
+  c.fillStyle = gf; c.fill(area);
+  const gl = c.createLinearGradient(0, 0, w, 0); gl.addColorStop(0, blue); gl.addColorStop(1, cyan);
+  c.strokeStyle = gl; c.lineWidth = 2; c.lineJoin = "round"; c.stroke(path);
+}
+
+// ---------- history (virtualized)
+let H = [], HF = [], hFilter = "all", offsets = [], total = 0;
+const ROW = 50, DAY = 30;
+async function loadHistory(force) {
+  if (!force && histVer === S.version) return;
+  histVer = S.version;
+  H = await api().history();
+  filterHistory();
+}
+function filterHistory() {
+  const q = $("q").value.trim().toLowerCase();
+  const rows = H.filter((r) => (hFilter === "all" || (hFilter === "file" ? !["image", "video"].includes(r.kind) : r.kind === hFilter))
+                          && (!q || r.name.toLowerCase().includes(q)));
+  HF = []; offsets = []; total = 0; let day = null;
+  for (const r of rows) {
+    if (r.day !== day) { day = r.day; HF.push({ header: day }); offsets.push(total); total += DAY; }
+    HF.push(r); offsets.push(total); total += ROW;
+  }
+  $("vspacer").style.height = total + "px";
+  $("hEmpty").classList.toggle("hidden", rows.length > 0);
+  $("hEmpty").querySelector("h3").textContent = H.length ? "No matches" : "Nothing received yet";
+  $("vlist").classList.toggle("hidden", rows.length === 0);
+  drawn.clear(); $("vspacer").innerHTML = ""; renderRows();
+}
+const drawn = new Map();
+function renderRows() {
+  const box = $("vlist"), top = box.scrollTop - 200, bottom = box.scrollTop + box.clientHeight + 200;
+  let lo = 0, hi = offsets.length - 1;
+  while (lo < hi) { const m = (lo + hi + 1) >> 1; if (offsets[m] <= top) lo = m; else hi = m - 1; }
+  const want = new Set();
+  for (let i = Math.max(0, lo); i < HF.length && offsets[i] < bottom; i++) want.add(i);
+  for (const [i, el] of drawn) if (!want.has(i)) { el.remove(); drawn.delete(i); }
+  const frag = document.createDocumentFragment();
+  for (const i of want) {
+    if (drawn.has(i)) continue;
+    const r = HF[i], el = document.createElement("div");
+    el.style.top = offsets[i] + "px";
+    if (r.header) { el.className = "day"; el.textContent = r.header; }
+    else {
+      el.className = "item";
+      const bad = r.status === "failed" || r.status === "cancelled";
+      el.innerHTML = `${thumbEl(r.kind, r.name, r.thumb)}<div class="info"><div class="name">${esc(r.name)}</div>
+        <div class="meta ${bad ? "bad" : r.path ? "" : "dim"}">${esc(r.sub)}${r.from ? ", from " + esc(r.from) : ""}</div></div>
+        <span class="time">${r.time}</span>
+        ${r.path ? `<div class="acts"><button class="icon-btn" data-a="reveal" title="Show in folder"><svg width="15" height="15"><use href="#i-folder"/></svg></button>
+        <button class="icon-btn" data-a="more" title="More"><svg width="15" height="15"><use href="#i-more"/></svg></button></div>` : ""}`;
+      if (r.path) {
+        el.onclick = (e) => { const a = e.target.closest("[data-a]"); if (!a) return api().open_path(r.path);
+          e.stopPropagation(); a.dataset.a === "reveal" ? api().reveal(r.path) : fileMenu(r, a.getBoundingClientRect()); };
+        el.oncontextmenu = (e) => { e.preventDefault(); fileMenu(r, { left: e.clientX, bottom: e.clientY }); };
+      }
+    }
+    drawn.set(i, el); frag.append(el);
+  }
+  $("vspacer").append(frag);
+}
+$("vlist").addEventListener("scroll", () => requestAnimationFrame(renderRows), { passive: true });
+$("q").addEventListener("input", () => { $("vlist").scrollTop = 0; filterHistory(); });
+document.querySelectorAll("#filters .chip").forEach((c) => c.onclick = () => {
+  hFilter = c.dataset.f; document.querySelectorAll("#filters .chip").forEach((x) => x.classList.toggle("on", x === c));
+  $("vlist").scrollTop = 0; filterHistory();
+});
+$("openFolder").onclick = () => api().open_folder();
+
+function fileMenu(r, at) {
+  menu([
+    ["Open", () => api().open_path(r.path)],
+    ["Show in folder", () => api().reveal(r.path)],
+    ["Copy path", () => { api().copy_text(r.path); toast("Path copied"); }],
+    ["Send to phone", () => { api().share_path(r.path); toast("Shared with the phone"); }],
+    null,
+    ["Move to Recycle Bin", () => confirmSheet(`Move ${r.name} to the Recycle Bin?`, "", "Move to Recycle Bin",
+      () => api().recycle(r.path).then(() => loadHistory(true))), "danger"],
+  ], at);
+}
+
+// ---------- phone
+async function loadPhone(force) {
+  if (!force && phoneVer === S.version) return;
+  phoneVer = S.version;
+  const P = await api().phone();
+  $("toList").innerHTML = P.shared.length ? P.shared.map((s) => s.kind === "file"
+    ? `<div class="item">${thumbEl(s.ftype, s.name, s.thumb)}<div class="info"><div class="name">${esc(s.name)}</div><div class="meta">${esc(s.sub)}</div></div>
+       <button class="icon-btn" data-un="${s.id}" title="Stop sharing"><svg width="13" height="13"><use href="#i-x"/></svg></button></div>`
+    : `<div class="item text-item"><div class="thumbimg kchip" style="color:var(--cyan);background:var(--fill)"><svg width="16" height="16"><use href="#i-clip"/></svg></div>
+       <div class="info"><div class="name">${esc(s.name)}</div><div class="meta">${esc(s.sub)}</div></div>
+       <button class="icon-btn" data-un="${s.id}" title="Stop sharing"><svg width="13" height="13"><use href="#i-x"/></svg></button></div>`).join("")
+    : `<div class="empty" style="padding:24px 0"><p>Files and text you add here appear on the phone under From PC.</p></div>`;
+  $("toList").querySelectorAll("[data-un]").forEach((b) => b.onclick = () => api().unshare(b.dataset.un).then(() => loadPhone(true)));
+  $("fromList").innerHTML = P.texts.length ? P.texts.map((t, i) => `<div class="item text-item" data-t="${i}">
+      <div class="info"><div class="name ${t.link ? "link" : ""}">${esc(t.text)}</div><div class="meta">${esc(t.sub)}</div></div>
+      ${t.link ? `<button class="icon-btn" data-open="${i}" title="Open link"><svg width="14" height="14"><use href="#i-open"/></svg></button>` : ""}
+      <button class="icon-btn" data-copy="${i}" title="Copy"><svg width="14" height="14"><use href="#i-copy"/></svg></button></div>`).join("")
+    : `<div class="empty" style="padding:24px 0"><p>Text and links sent from the phone page or the Copy to PC Shortcut land here.</p></div>`;
+  $("fromList").querySelectorAll("[data-copy]").forEach((b) => b.onclick = () => { api().copy_text(P.texts[+b.dataset.copy].text); toast("Copied"); });
+  $("fromList").querySelectorAll("[data-open]").forEach((b) => b.onclick = () => api().open_url(P.texts[+b.dataset.open].text));
+}
+function renderDevices() {
+  const key = JSON.stringify(S.devices);
+  if (key === renderDevices.k) return;
+  renderDevices.k = key;
+  $("devices").innerHTML = S.devices.map((d, i) => `<button class="dev ${d.online ? "online" : ""}" data-d="${i}">
+      <span class="ph"><svg width="14" height="14"><use href="#i-phone"/></svg></span>
+      <span style="text-align:left"><div class="n">${esc(d.name)}</div><div class="s">${esc(d.sub)}</div></span></button>`).join("")
+    + `<button class="dev add" id="addDev"><svg width="14" height="14"><use href="#i-plus"/></svg>${S.devices.length ? "Pair" : "Pair a phone"}</button>`;
+  $("addDev").onclick = openPair;
+  $("devices").querySelectorAll("[data-d]").forEach((b) => b.onclick = () => {
+    const d = S.devices[+b.dataset.d];
+    menu([["Unpair " + d.name, () => confirmSheet(`Unpair ${d.name}?`, "It will have to pair again before it can send files.", "Unpair",
+      () => api().unpair(d.id).then(tick)), "danger"]], b.getBoundingClientRect());
+  });
+}
+$("drop").onclick = () => api().pick_share().then((n) => { if (n) { toast(`Shared ${n} file${n > 1 ? "s" : ""}`); loadPhone(true); } });
+$("sendClip").onclick = () => api().send_clip().then((what) => { toast(what ? `Sent ${what} to the phone` : "Nothing to send"); loadPhone(true); });
+$("dismissClip").onclick = () => api().dismiss_clip().then(tick);
+function renderClip() {
+  const c = S.clip, card = $("clipCard");
+  card.classList.toggle("hidden", !c);
+  if (!c || renderClip.seq === c.seq + c.thumbs.map((t) => t.thumb).join()) return;
+  renderClip.seq = c.seq + c.thumbs.map((t) => t.thumb).join();
+  $("clipThumbs").innerHTML = c.kind === "text"
+    ? `<div class="thumbimg kchip" style="color:var(--blue);background:var(--fill)"><svg width="16" height="16"><use href="#i-clip"/></svg></div>`
+    : c.thumbs.map((t) => thumbEl(t.kind, t.name, t.thumb, 36)).join("");
+  $("clipLabel").textContent = (c.kind === "text" ? "Copied: " : "") + c.label;
+  $("clipSub").textContent = c.sub;
+}
+$("tSync").onclick = () => api().set_setting("clip_sync", !S.settings.clip_sync).then(tick);
+$("tCopy").onclick = () => api().set_setting("auto_copy", !S.settings.auto_copy).then(tick);
+document.addEventListener("dragover", (e) => e.preventDefault());
+document.addEventListener("dragenter", () => { document.body.classList.add("dragging"); if (view !== "phone") { go("phone"); } });
+document.addEventListener("dragleave", (e) => { if (!e.relatedTarget) document.body.classList.remove("dragging"); });
+function onDropped(n) {
+  document.body.classList.remove("dragging");
+  toast(n ? `Shared ${n} file${n > 1 ? "s" : ""} with the phone` : "Only files can be shared");
+  if (psub !== "to") document.querySelector('#psub [data-p="to"]').click();
+  loadPhone(true);
+}
+
+// ---------- pairing sheet
+async function openPair() {
+  const p = await api().pair_info();
+  sheet(`<h3>Pair a phone</h3><p>Scan with the iPhone camera. The page asks this PC to pair; then add it to the Home Screen.</p>
+    <div class="qr"><img src="${p.qr}" alt="Pairing QR code"><div>
+      <div class="meta">Home Screen address</div><div class="addr">${esc(p.home)}</div>
+      ${p.mdns ? "" : `<div class="meta" style="margin-top:4px">or ${esc(p.ip)}</div>`}
+      <div class="meta" style="margin-top:10px">Pairing code</div><div class="code">${esc(p.code)}</div></div></div>
+    <div class="btns"><button class="btn" id="copyLink">Copy link</button><button class="btn primary" data-close>Done</button></div>`);
+  $("copyLink").onclick = () => { api().copy_text(p.link); toast("Link copied"); };
+}
+
+// ---------- settings
+const MODES = [["always", "Always"], ["busy", "While receiving"], ["idle", "When idle"], ["off", "Off"]];
+const BLOCKS = [["throughput", "Throughput graph"], ["totals", "Totals"], ["recent", "Recent activity"], ["connection", "Connection"]];
+$("blockRows").innerHTML = BLOCKS.map(([k, label]) => `<div class="srow"><div class="l">${label}</div>
+  <select data-block="${k}">${MODES.map(([v, t]) => `<option value="${v}">${t}</option>`).join("")}</select></div>`).join("");
+document.querySelectorAll("[data-block]").forEach((s) => s.onchange = () => api().set_setting("block", [s.dataset.block, s.value]).then(tick));
+document.querySelectorAll("[data-s]").forEach((t) => t.onclick = () => {
+  const k = t.dataset.s, cur = k === "ask" ? !S.settings.auto_accept : S.settings[k];
+  api().set_setting(k === "ask" ? "auto_accept" : k, k === "ask" ? cur : !cur).then(() => tick().then(renderSettings));
+});
+function renderSettings() {
+  if (!S) return;
+  const st = S.settings;
+  document.querySelectorAll("[data-s]").forEach((t) => setToggle(t, t.dataset.s === "ask" ? !st.auto_accept : st[t.dataset.s]));
+  document.querySelectorAll("[data-block]").forEach((s) => s.value = st.blocks[s.dataset.block]);
+  $("saveDir").textContent = st.save_dir;
+  $("glassSel").value = st.glass; document.body.dataset.glass = st.glass;
+  $("drawerAt").value = st.drawer_at; $("atRow").classList.toggle("hidden", !st.widget);
+  if (document.activeElement !== $("fName")) $("fName").value = S.pc.name;
+  if (document.activeElement !== $("fCode")) $("fCode").value = st.token;
+}
+$("glassSel").onchange = () => { document.body.dataset.glass = $("glassSel").value; api().set_setting("glass", $("glassSel").value).then(tick); };
+$("drawerAt").onchange = () => api().set_setting("drawer_at", $("drawerAt").value).then(tick);
+$("fName").onchange = () => api().set_setting("pc_name", $("fName").value).then(() => { toast("Name saved"); tick(); });
+$("fCode").onchange = () => api().set_setting("token", $("fCode").value).then((err) => { toast(err || "Pairing code saved"); tick().then(renderSettings); });
+$("newCode").onclick = () => api().new_code().then((c) => { $("fCode").value = c; toast("New pairing code"); });
+$("chooseDir").onclick = () => api().choose_folder().then((d) => $("saveDir").textContent = d);
+$("clearHist").onclick = () => confirmSheet("Clear the history?", "Totals reset too. Received files stay where they are.", "Clear history",
+  () => api().clear_history().then(() => { histVer = -1; toast("History cleared"); }));
+$("quitBtn").onclick = () => api().quit();
+
+// ---------- sheets and menus
+function sheet(html) {
+  $("sheet").innerHTML = html; $("scrim").classList.add("on");
+  $("sheet").querySelectorAll("[data-close]").forEach((b) => b.onclick = closeSheet);
+}
+function closeSheet() { $("scrim").classList.remove("on"); }
+$("scrim").onclick = (e) => { if (e.target === $("scrim")) closeSheet(); };
+function confirmSheet(title, text, action, fn) {
+  sheet(`<h3>${esc(title)}</h3>${text ? `<p>${esc(text)}</p>` : ""}<div class="btns"><button class="btn" data-close>Cancel</button>
+    <button class="btn primary" id="okBtn" style="background:var(--red)">${esc(action)}</button></div>`);
+  $("okBtn").onclick = () => { closeSheet(); fn(); };
+}
+function menu(items, at) {
+  const m = $("menu");
+  m.innerHTML = items.map((it, i) => it ? `<button data-m="${i}" class="${it[2] || ""}">${esc(it[0])}</button>` : "<hr>").join("");
+  m.querySelectorAll("[data-m]").forEach((b) => b.onclick = () => { m.classList.remove("on"); items[+b.dataset.m][1](); });
+  m.classList.add("on");
+  const r = m.getBoundingClientRect();
+  m.style.left = Math.min(at.left, innerWidth - r.width - 8) + "px";
+  m.style.top = Math.min(at.bottom + 4, innerHeight - r.height - 8) + "px";
+}
+document.addEventListener("mousedown", (e) => { if (!e.target.closest("#menu")) $("menu").classList.remove("on"); });
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Escape") return;
+  if ($("scrim").classList.contains("on")) closeSheet(); else if ($("menu").classList.contains("on")) $("menu").classList.remove("on"); else api().hide();
+});
+document.addEventListener("contextmenu", (e) => { if (!e.target.closest("input")) e.preventDefault(); });
+window.addEventListener("blur", () => { if (window.pywebview) api().blurred(); });
+
+// ---------- state loop
+async function tick() {
+  try { S = await api().state(); } catch (e) { return; }
+  $("pcName").textContent = S.pc.name;
+  if (document.body.dataset.glass !== S.settings.glass) document.body.dataset.glass = S.settings.glass;
+  $("statusText").textContent = S.status.text;
+  $("dot").className = "dot " + (S.status.tone === "ok" ? "" : S.status.tone);
+  $("pauseBtn").classList.toggle("on", S.paused);
+  $("pauseBtn").title = S.paused ? "Resume receiving" : "Pause receiving";
+  $("pauseBtn").innerHTML = `<svg width="16" height="16"><use href="#i-${S.paused ? "play" : "pause"}"/></svg>`;
+  $("phoneN").className = S.devices.some((d) => d.online) ? "live" : "n";
+  $("phoneN").title = S.devices.some((d) => d.online) ? "A phone is connected" : "";
+  $("toN").textContent = S.counts.shared || ""; $("fromN").textContent = S.counts.texts || "";
+  setToggle($("tSync"), S.settings.clip_sync); setToggle($("tCopy"), S.settings.auto_copy);
+  if (view === "activity") { renderLens(); renderBlocks(); }
+  if (view === "history") loadHistory(false);
+  if (view === "phone") { renderDevices(); renderClip(); loadPhone(false); }
+}
+let timer = null;
+function loop() { clearTimeout(timer); if (!shown) return; tick().finally(() => timer = setTimeout(loop, S && (S.busy || S.prompts.length) ? 300 : 700)); }
+function onShow(v) { shown = true; lensKey = ""; if (v) go(v); else segMove($("tabs")); loop(); }
+function onHide() { shown = false; closeSheet(); $("menu").classList.remove("on"); }
+window.addEventListener("pywebviewready", () => { segMove($("tabs")); loop(); });
+window.addEventListener("resize", () => { segMove($("tabs")); segMove($("psub")); });
+</script>
+</body>
+</html>

@@ -1,0 +1,9 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Build output: the installer is attached to GitHub Releases, not committed
+build/
+dist/
+installer/Output/

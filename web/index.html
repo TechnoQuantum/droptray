@@ -1,0 +1,713 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="DropTray">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#1a1a1d" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#f0f0f3" media="(prefers-color-scheme: light)">
+<link rel="apple-touch-icon" href="/icon.png">
+<title>DropTray</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --ink: #f5f5f7; --ink2: rgba(235,235,245,.62); --ink3: rgba(235,235,245,.36);
+    --panel: rgba(255,255,255,.065); --panel2: rgba(255,255,255,.11); --stroke: rgba(255,255,255,.10); --hi: rgba(255,255,255,.12);
+    --fill: rgba(118,118,128,.24); --bg: #1a1a1d; --bar: rgba(44,44,48,.72);
+    --amb1: rgba(255,255,255,.07); --amb2: rgba(160,160,175,.07);
+    --blue: #0a84ff; --cyan: #64d2ff; --green: #30d158; --orange: #ff9f0a; --red: #ff453a;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      color-scheme: light;
+      --ink: #1d1d1f; --ink2: rgba(60,60,67,.66); --ink3: rgba(60,60,67,.38);
+      --panel: rgba(255,255,255,.62); --panel2: rgba(255,255,255,.85); --stroke: rgba(0,0,0,.07); --hi: rgba(255,255,255,.9);
+      --fill: rgba(118,118,128,.13); --bg: #f0f0f3; --bar: rgba(250,250,252,.75);
+      --amb1: rgba(255,255,255,.8); --amb2: rgba(200,200,212,.35);
+      --blue: #007aff; --cyan: #32ade6; --green: #34c759; --orange: #ff9500; --red: #ff3b30;
+    }
+  }
+  * { box-sizing: border-box; margin: 0; -webkit-tap-highlight-color: transparent; }
+  html { -webkit-text-size-adjust: 100%; background: var(--bg); }
+  body { min-height: 100vh; color: var(--ink); overflow-x: hidden; background: var(--bg);
+         font: 17px/1.35 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+         font-feature-settings: "tnum"; -webkit-font-smoothing: antialiased; }
+  /* the soft grey backdrop lives on its own fixed layer: iOS repaints fixed backgrounds on every scroll */
+  body::before { content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+                 background: radial-gradient(70vmax 50vmax at 90% -10%, var(--amb1), transparent 60%),
+                             radial-gradient(60vmax 50vmax at -10% 60%, var(--amb2), transparent 60%); }
+  button, input, textarea { font: inherit; color: inherit; }
+  button { background: none; border: 0; cursor: pointer; }
+  :focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+  svg { display: block; }
+  .hidden { display: none !important; }
+  .wrap { max-width: 560px; margin: 0 auto; padding: 0 16px calc(110px + env(safe-area-inset-bottom)); }
+
+  header { padding: calc(14px + env(safe-area-inset-top)) 20px 6px; max-width: 560px; margin: 0 auto; }
+  header .top { display: flex; align-items: center; gap: 10px; }
+  header h1 { font: 700 34px/1.1 -apple-system, "SF Pro Display", "Segoe UI Variable Display", "Segoe UI", sans-serif; letter-spacing: -.5px; flex: 1; }
+  .mark { width: 36px; height: 36px; border-radius: 10px; flex: none; }
+  .pcpill { display: inline-flex; align-items: center; gap: 7px; margin-top: 8px; padding: 6px 12px 6px 10px; border-radius: 999px;
+            background: var(--panel); border: 1px solid var(--stroke); font-size: 14px; color: var(--ink2); max-width: 100%; }
+  .pcpill b { color: var(--ink); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ink3); flex: none; }
+  .dot.ok { background: var(--green); } .dot.warn { background: var(--orange); } .dot.bad { background: var(--red); }
+
+  /* panels: translucent fill, no live blur (blur on every card made scrolling slow on iPhone) */
+  .glass { background: var(--panel); border: 1px solid var(--stroke); border-radius: 22px; box-shadow: inset 0 1px 0 var(--hi); }
+  .card { padding: 16px; margin-top: 14px; }
+  .card h2 { font: 600 17px/1.25 -apple-system, "SF Pro Display", "Segoe UI Variable Display", sans-serif; }
+  .note { font-size: 14px; color: var(--ink2); }
+  .row { display: flex; align-items: center; gap: 10px; }
+  .row > * { min-width: 0; }
+  .grow { flex: 1; }
+
+  .btn { height: 44px; padding: 0 18px; border-radius: 22px; font-weight: 600; font-size: 16px; background: var(--panel2);
+         border: 1px solid var(--stroke); box-shadow: inset 0 1px 0 var(--hi); display: inline-flex; align-items: center;
+         justify-content: center; gap: 8px; white-space: nowrap; color: var(--ink); text-decoration: none; }
+  .btn:active { transform: scale(.97); }
+  .btn.primary { background: linear-gradient(180deg, color-mix(in srgb, var(--blue) 82%, white), var(--blue)); color: #fff; border-color: transparent; }
+  .btn.small { height: 34px; padding: 0 14px; font-size: 15px; border-radius: 17px; }
+  .btn.danger { color: var(--red); }
+  .btn.wide { width: 100%; }
+  .btn:disabled { opacity: .45; }
+  .icon-btn { width: 34px; height: 34px; border-radius: 17px; display: grid; place-items: center; color: var(--ink2); background: var(--fill); flex: none; }
+
+  /* the lens */
+  .lens { position: relative; margin-top: 14px; border-radius: 28px; overflow: hidden; }
+  .lens::before { content: ""; position: absolute; inset: 0; z-index: 2; pointer-events: none;
+                  background: radial-gradient(120% 70% at 12% -12%, rgba(255,255,255,.14), transparent 55%); }
+  .lens .body { position: relative; z-index: 3; padding: 20px; min-height: 236px; display: flex; flex-direction: column; }
+  .liquid { position: absolute; left: 0; right: 0; bottom: 0; height: 0; z-index: 1; will-change: height;
+            background: linear-gradient(180deg, color-mix(in srgb, var(--cyan) 50%, transparent), color-mix(in srgb, var(--blue) 62%, transparent));
+            transition: height .6s cubic-bezier(.2,.8,.2,1); }
+  .liquid svg { position: absolute; left: 0; top: -11px; width: 200%; height: 12px; animation: wave 2.6s linear infinite; will-change: transform; }
+  .liquid svg path { fill: color-mix(in srgb, var(--cyan) 50%, transparent); }
+  .liquid.still svg { animation-play-state: paused; }
+  .liquid.done { background: linear-gradient(180deg, color-mix(in srgb, var(--green) 42%, transparent), color-mix(in srgb, var(--green) 58%, transparent)); }
+  .liquid.done svg path { fill: color-mix(in srgb, var(--green) 42%, transparent); }
+  @keyframes wave { to { transform: translateX(-50%); } }
+  @media (prefers-reduced-motion: reduce) { .liquid svg { animation: none; } .liquid { transition: none; } }
+  .glyph { width: 52px; height: 52px; border-radius: 50%; display: grid; place-items: center; color: #fff; flex: none;
+           background: linear-gradient(160deg, var(--cyan), var(--blue)); box-shadow: inset 0 1px 0 rgba(255,255,255,.45); }
+  .lens h3 { font: 600 22px/1.2 -apple-system, "SF Pro Display", "Segoe UI Variable Display", sans-serif; }
+  .lens .sub { color: var(--ink2); font-size: 15px; }
+  .big { font: 700 56px/1 -apple-system, "SF Pro Display", "Segoe UI Variable Display", sans-serif; letter-spacing: -2px; }
+  .spacer { flex: 1; min-height: 14px; }
+  .now { font-size: 14px; color: var(--ink2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  input[type=file] { display: none; }
+  /* Paste is an editable area dressed as a button: over plain http, iOS only pastes into editable fields */
+  .pastewrap { position: relative; margin-top: 10px; }
+  .pastebtn { display: block; width: 100%; min-height: 48px; padding: 13px 18px 13px 46px; border-radius: 24px; outline: none;
+              background: var(--panel2); border: 1px solid var(--stroke); box-shadow: inset 0 1px 0 var(--hi);
+              -webkit-user-select: text; user-select: text; caret-color: var(--blue); font-size: 16px; overflow: hidden; }
+  /* the label is drawn, not typed: an empty field is what makes iOS offer Paste on a long press */
+  .pastebtn:empty::before { content: attr(data-ph); color: var(--ink2); font-weight: 600; pointer-events: none; }
+  .pastebtn:focus { border-color: var(--blue); box-shadow: 0 0 0 3px color-mix(in srgb, var(--blue) 30%, transparent); }
+  .pastewrap svg { position: absolute; left: 18px; top: 15px; color: var(--ink2); pointer-events: none; }
+
+  .list { margin-top: 10px; }
+  .item { display: flex; align-items: center; gap: 12px; padding: 9px 0; border-top: 1px solid var(--stroke); }
+  .item:first-child { border-top: 0; }
+  .thumb { width: 46px; height: 46px; border-radius: 11px; flex: none; object-fit: cover; background: var(--fill);
+           display: grid; place-items: center; font-size: 10px; font-weight: 800; letter-spacing: .3px; }
+  .info { flex: 1; min-width: 0; }
+  .name { font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .meta { font-size: 13px; color: var(--ink2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .item.fail .meta { color: var(--red); }
+  .mini { height: 3px; border-radius: 2px; background: var(--fill); margin-top: 6px; overflow: hidden; }
+  .mini i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--blue), var(--cyan)); }
+  .item.done .mini i { background: var(--green); }
+  .state { width: 22px; text-align: center; flex: none; font-weight: 700; }
+  .scrollbox { max-height: 44vh; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+  .textitem { white-space: pre-wrap; word-break: break-word; font-size: 15px; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+  textarea { width: 100%; min-height: 84px; resize: vertical; margin-top: 12px; padding: 12px 14px; border-radius: 16px; outline: none;
+             background: var(--fill); border: 1px solid transparent; font-size: 16px; }
+  textarea:focus { border-color: var(--blue); }
+  input.field { width: 100%; height: 46px; padding: 0 14px; border-radius: 14px; background: var(--fill); border: 1px solid transparent; outline: none; font-size: 17px; }
+  input.field:focus { border-color: var(--blue); }
+  .clipimg { width: 100%; max-height: 240px; object-fit: contain; border-radius: 14px; margin-top: 12px; background: var(--fill); }
+
+  .stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 14px 0; }
+  .stat { text-align: center; padding: 14px 4px; border-radius: 16px; background: var(--fill); }
+  .stat b { display: block; font: 700 26px/1.1 -apple-system, "SF Pro Display", sans-serif; }
+  .stat span { font-size: 12px; color: var(--ink2); }
+
+  /* floating bars keep the real blur: there are only two of them */
+  .tabbar { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(14px + env(safe-area-inset-bottom)); z-index: 10;
+            display: flex; gap: 2px; padding: 5px; border-radius: 30px; width: min(380px, calc(100% - 32px));
+            background: var(--bar); border: 1px solid var(--stroke);
+            -webkit-backdrop-filter: blur(24px) saturate(1.6); backdrop-filter: blur(24px) saturate(1.6);
+            box-shadow: inset 0 1px 0 var(--hi), 0 14px 34px -14px rgba(0,0,0,.6); }
+  .tabbar button { flex: 1; height: 52px; border-radius: 25px; display: flex; flex-direction: column; align-items: center; justify-content: center;
+                   gap: 2px; font-size: 11px; font-weight: 600; color: var(--ink2); position: relative; }
+  .tabbar button.on { color: var(--blue); background: var(--fill); }
+  .badge { position: absolute; top: 4px; left: calc(50% + 8px); min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px;
+           background: var(--red); color: #fff; font-size: 11px; line-height: 18px; }
+  .toast { position: fixed; left: 50%; bottom: calc(92px + env(safe-area-inset-bottom)); transform: translate(-50%, 12px); opacity: 0;
+           z-index: 20; pointer-events: none; padding: 11px 18px; border-radius: 22px; font-size: 15px; font-weight: 600;
+           background: var(--bar); border: 1px solid var(--stroke); -webkit-backdrop-filter: blur(24px); backdrop-filter: blur(24px);
+           transition: opacity .25s, transform .25s; max-width: calc(100% - 40px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .toast.on { opacity: 1; transform: translate(-50%, 0); }
+
+  /* viewer: photos and videos open here, so the page never navigates away */
+  .viewer { position: fixed; inset: 0; z-index: 30; background: rgba(0,0,0,.92); display: flex; flex-direction: column; }
+  .viewer .vbar { display: flex; align-items: center; gap: 10px; padding: calc(10px + env(safe-area-inset-top)) 16px 10px; color: #fff; }
+  .viewer .vname { flex: 1; min-width: 0; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .viewer .vbody { flex: 1; min-height: 0; display: grid; place-items: center; padding: 8px; }
+  .viewer img, .viewer video { max-width: 100%; max-height: 100%; border-radius: 10px; -webkit-touch-callout: default; }
+  .viewer .vhint { color: rgba(255,255,255,.6); font-size: 13px; text-align: center; padding: 8px 16px calc(14px + env(safe-area-inset-bottom)); }
+  .spinner { width: 16px; height: 16px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%;
+             display: inline-block; animation: spin .8s linear infinite; vertical-align: -3px; margin-right: 8px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <linearGradient id="g-mark" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#64d2ff"/><stop offset="1" stop-color="#0a84ff"/></linearGradient>
+    <symbol id="i-up" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15.5v-11"/><path d="m7.5 9 4.5-4.5L16.5 9"/><path d="M4 15.5v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></g></symbol>
+    <symbol id="i-in" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5v11"/><path d="m7.5 10.5 4.5 4.5 4.5-4.5"/><path d="M4 15.5v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></g></symbol>
+    <symbol id="i-pc" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><rect x="2.5" y="4" width="19" height="12.5" rx="2.2"/><path d="M8 20.5h8M12 16.5v4"/></g></symbol>
+    <symbol id="i-more" viewBox="0 0 24 24"><path d="M3 12h4l3 8 4-16 3 8h4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-paste" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.9"><rect x="5.5" y="4.5" width="13" height="16" rx="2.2"/><path d="M9 4.5V3.8a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v.7"/></g></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M7 7l10 10M17 7 7 17" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></symbol>
+  </defs>
+</svg>
+
+<header>
+  <div class="top">
+    <h1>DropTray</h1>
+    <svg class="mark" viewBox="0 0 36 36"><rect width="36" height="36" rx="10" fill="url(#g-mark)"/><use href="#i-in" x="7.5" y="7" width="21" height="21" color="#fff"/></svg>
+  </div>
+  <div class="pcpill"><i class="dot" id="dot"></i><b id="pcName">Connecting</b><span id="pcState"></span></div>
+</header>
+
+<div class="wrap">
+  <section id="pairView" class="hidden">
+    <div class="glass card">
+      <h2 id="pairTitle">Pair with this PC</h2>
+      <p class="note" style="margin-top:4px">Once paired, this phone can send to it. Each PC keeps its own pairing; the page switches between them by itself.</p>
+      <p class="note" style="margin-top:14px">This phone's name</p>
+      <input class="field" id="devName" maxlength="40" style="margin-top:6px" autocomplete="off">
+      <button class="btn primary wide" id="askPair" style="margin-top:14px">Ask the PC to pair</button>
+      <p class="note hidden" id="pairWait" style="margin-top:12px;text-align:center"><span class="spinner"></span>Accept the request on the PC</p>
+      <p class="note" style="margin-top:18px">Or type the pairing code shown in DropTray</p>
+      <div class="row" style="margin-top:6px">
+        <input class="field grow" id="codeInput" placeholder="Pairing code" autocomplete="off" autocapitalize="characters">
+        <button class="btn" id="codePair">Pair</button>
+      </div>
+    </div>
+  </section>
+
+  <section id="sendView" class="hidden">
+    <div class="glass lens" id="lens">
+      <div class="liquid hidden" id="liquid"><svg viewBox="0 0 200 12" preserveAspectRatio="none"><path d="M0 6 Q 12.5 0 25 6 T 50 6 T 75 6 T 100 6 T 125 6 T 150 6 T 175 6 T 200 6 V12 H0z"/></svg></div>
+      <div class="body" id="lensBody"></div>
+    </div>
+    <input type="file" id="fileInput" multiple>
+    <div class="glass card hidden" id="batchListCard">
+      <div class="row"><h2 class="grow" id="batchListTitle">Files</h2><button class="btn small" id="toggleList">Show</button></div>
+      <div class="list scrollbox hidden" id="batchList"></div>
+    </div>
+    <div class="glass card">
+      <h2>Send text or a link</h2>
+      <textarea id="textIn" placeholder="Type or paste"></textarea>
+      <button class="btn primary wide" id="textSend" style="margin-top:12px">Send to PC</button>
+    </div>
+  </section>
+
+  <section id="fromView" class="hidden">
+    <div class="glass card" id="clipCard">
+      <div class="row"><h2 class="grow">Copied on the PC</h2><button class="icon-btn hidden" id="clipX" title="Hide"><svg width="14" height="14"><use href="#i-x"/></svg></button></div>
+      <div id="clipBody"></div>
+    </div>
+    <div class="glass card">
+      <div class="row"><h2 class="grow">Shared from the PC</h2><button class="btn small" id="refreshShared">Refresh</button></div>
+      <div class="list" id="sharedList"></div>
+    </div>
+  </section>
+
+  <section id="moreView" class="hidden">
+    <div class="glass card">
+      <h2>Connection speed</h2>
+      <div class="stats">
+        <div class="stat"><b id="sUp" style="color:#bf5af2">–</b><span>Upload Mbps</span></div>
+        <div class="stat"><b id="sDown" style="color:var(--cyan)">–</b><span>Download Mbps</span></div>
+        <div class="stat"><b id="sPing" style="color:var(--green)">–</b><span>Ping ms</span></div>
+      </div>
+      <button class="btn wide" id="speedBtn">Run speed test</button>
+    </div>
+    <div class="glass card">
+      <h2>Paired PCs</h2>
+      <p class="note" style="margin-top:4px">This page connects to whichever of them is on the current network.</p>
+      <div class="list" id="pcList"></div>
+    </div>
+    <div class="glass card">
+      <h2>Add to Home Screen</h2>
+      <p class="note" id="homeNote" style="margin-top:4px">Tap Share, then Add to Home Screen, to open DropTray like an app.</p>
+    </div>
+  </section>
+</div>
+
+<nav class="tabbar hidden" id="tabs">
+  <button data-tab="send" class="on"><svg width="24" height="24"><use href="#i-up"/></svg>Send</button>
+  <button data-tab="from"><svg width="24" height="24"><use href="#i-pc"/></svg>From PC<span class="badge hidden" id="fromBadge"></span></button>
+  <button data-tab="more"><svg width="24" height="24"><use href="#i-more"/></svg>More</button>
+</nav>
+<div class="viewer hidden" id="viewer">
+  <div class="vbar"><span class="vname" id="vName"></span><button class="btn small" id="vSave">Save</button><button class="btn small" id="vClose">Close</button></div>
+  <div class="vbody" id="vBody"></div>
+  <div class="vhint" id="vHint"></div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const UA = navigator.userAgent;
+const defaultName = /iPhone/.test(UA) ? "iPhone" : /iPad/.test(UA) ? "iPad" : /Android/.test(UA) ? "Android phone" : "Browser";
+const KIND = {
+  image: ["jpg","jpeg","png","heic","heif","gif","webp","bmp","tif","tiff","dng","avif"],
+  video: ["mov","mp4","m4v","avi","mkv","webm","hevc","3gp"],
+  audio: ["m4a","mp3","wav","aac","flac","ogg","caf"],
+  doc: ["pdf","doc","docx","txt","rtf","pages","key","numbers","xls","xlsx","ppt","pptx","csv","md","json"],
+  archive: ["zip","rar","7z","tar","gz"],
+};
+const KCOL = { image: "#bf5af2", video: "#ff375f", audio: "#ff9f0a", doc: "#0a84ff", archive: "#ffd60a", other: "#8e8e93" };
+const VIEWABLE = { image: ["jpg","jpeg","png","heic","heif","gif","webp","avif"], video: ["mov","mp4","m4v"] };
+const extOf = (n) => (n.includes(".") ? n.split(".").pop() : "").toLowerCase();
+const kindOf = (n) => Object.keys(KIND).find((k) => KIND[k].includes(extOf(n))) || "other";
+const viewAs = (n) => Object.keys(VIEWABLE).find((k) => VIEWABLE[k].includes(extOf(n)));
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+function load(k, d) { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch (e) { return d; } }
+function save(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+let pcs = load("droptray-pcs", {});
+let device = load("droptray-device", defaultName);
+let pc = null, key = "", tab = "send";
+
+function fmtBytes(n) { const u = ["B", "KB", "MB", "GB"]; let i = 0; while (n >= 1024 && i < 3) { n /= 1024; i++; } return (i ? n.toFixed(1) : n.toFixed(0)) + " " + u[i]; }
+function fmtEta(s) { return !isFinite(s) || s <= 0 ? "" : s < 60 ? Math.ceil(s) + " s left" : Math.floor(s / 60) + " min " + Math.round(s % 60) + " s left"; }
+function toast(t) { const el = $("toast"); el.textContent = t; el.classList.add("on"); clearTimeout(el.t); el.t = setTimeout(() => el.classList.remove("on"), 2200); }
+function badge(name, size = 46) {
+  const c = KCOL[kindOf(name)];
+  return `<div class="thumb" style="width:${size}px;height:${size}px;color:${c};background:color-mix(in srgb, ${c} 20%, var(--fill))">${esc((extOf(name) || "file").toUpperCase().slice(0, 4))}</div>`;
+}
+function setPill(text, state, cls) { $("pcName").textContent = text; $("pcState").textContent = state || ""; $("dot").className = "dot " + (cls || ""); }
+function api(path, opts = {}) {
+  opts.headers = Object.assign({ "X-Token": key, "X-Device": device }, opts.headers || {});
+  return fetch(path, opts).then((r) => { if (r.status === 401) { forget(); throw new Error("auth"); } return r; });
+}
+const withKey = (path) => path + (path.includes("?") ? "&" : "?") + "t=" + encodeURIComponent(key);
+function forget() { if (pc && pcs[pc.id]) { delete pcs[pc.id]; save("droptray-pcs", pcs); } key = ""; showPair(); }
+function copyText(t) {
+  const ta = document.createElement("textarea");
+  ta.value = t; ta.setAttribute("readonly", ""); ta.style.position = "fixed"; ta.style.opacity = "0";
+  document.body.appendChild(ta); ta.select(); ta.setSelectionRange(0, t.length);
+  let ok = false; try { ok = document.execCommand("copy"); } catch (e) {}
+  ta.remove(); toast(ok ? "Copied" : "Press and hold to copy");
+}
+function withTimeout(ms) { const c = new AbortController(); setTimeout(() => c.abort(), ms); return c.signal; }
+
+// ---------- opening files without ever leaving the page
+function openFile(url, name) {
+  const as = viewAs(name);
+  if (!as) { window.open(url, "_blank"); return; }   // its own window: closing it brings you back here
+  const body = $("vBody");
+  body.innerHTML = as === "image" ? `<img src="${esc(url + "&inline=1")}" alt="">`
+    : `<video src="${esc(url + "&inline=1")}" controls playsinline autoplay></video>`;
+  $("vName").textContent = name;
+  $("vHint").textContent = as === "image" ? "Press and hold the photo to save it to Photos." : "Use Save to keep the video in Files.";
+  $("vSave").onclick = () => window.open(url, "_blank");
+  $("viewer").classList.remove("hidden");
+}
+$("vClose").onclick = () => { $("viewer").classList.add("hidden"); $("vBody").innerHTML = ""; };
+
+// ---------- views
+const views = { send: "sendView", from: "fromView", more: "moreView" };
+function show(name) {
+  tab = name;
+  $("pairView").classList.add("hidden"); $("tabs").classList.remove("hidden");
+  for (const [k, id] of Object.entries(views)) $(id).classList.toggle("hidden", k !== name);
+  document.querySelectorAll(".tabbar button").forEach((b) => b.classList.toggle("on", b.dataset.tab === name));
+  if (name === "from") { loadShared(); loadClip(true); }
+  if (name === "more") renderPcs();
+  scrollTo({ top: 0 });
+}
+function showPair() {
+  for (const id of Object.values(views)) $(id).classList.add("hidden");
+  $("tabs").classList.add("hidden"); $("pairView").classList.remove("hidden");
+  $("pairTitle").textContent = "Pair with " + (pc ? pc.name : "this PC");
+  $("devName").value = device;
+  setPill(pc ? pc.name : "Not paired", "not paired", "warn");
+}
+document.querySelectorAll(".tabbar button").forEach((b) => b.onclick = () => show(b.dataset.tab));
+
+// ---------- start
+async function start() {
+  const qs = new URLSearchParams(location.search);
+  const code = qs.get("pair") || qs.get("t") || "";
+  try { pc = await (await fetch("/hello", { cache: "no-store" })).json(); }
+  catch (e) { setPill("PC offline", "", "bad"); setTimeout(start, 4000); return; }
+  // One address for every PC. Tried once per session, so a network without Bonjour costs nothing after that.
+  let tried = false; try { tried = sessionStorage.getItem("dt-upgrade") === "1"; sessionStorage.setItem("dt-upgrade", "1"); } catch (e) {}
+  if (location.hostname !== "droptray.local" && pc.mdns && !tried) {
+    try {
+      const other = await (await fetch("http://droptray.local:" + location.port + "/hello", { cache: "no-store", signal: withTimeout(1800) })).json();
+      if (other.id === pc.id) { location.replace("http://droptray.local:" + location.port + "/" + (code ? "?pair=" + encodeURIComponent(code) : "")); return; }
+    } catch (e) { /* no Bonjour on this network: stay on the IP address */ }
+  }
+  if (code) history.replaceState(null, "", location.pathname);
+  $("homeNote").textContent = location.hostname === "droptray.local"
+    ? "Tap Share, then Add to Home Screen. The icon opens whichever paired PC is on your network."
+    : "Tap Share, then Add to Home Screen. This network has no Bonjour, so the icon is tied to " + location.host + ".";
+  key = (pcs[pc.id] || {}).key || "";
+  if (!key && code) await pair({ code });
+  if (!key) { showPair(); return; }
+  pcs[pc.id].last = Date.now(); pcs[pc.id].name = pc.name; save("droptray-pcs", pcs);
+  show("send"); renderLens(); heartbeat();
+}
+async function pair(body) {
+  body.device = device;
+  const r = await (await fetch("/pair", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })).json();
+  if (!r.ok) { toast(r.reason || "Not paired"); return false; }
+  pcs[r.id] = { key: r.key, name: r.name, last: Date.now() }; save("droptray-pcs", pcs);
+  key = r.key; pc = Object.assign({}, pc, { id: r.id, name: r.name });
+  toast("Paired with " + r.name);
+  return true;
+}
+$("devName").onchange = () => { device = $("devName").value.trim() || defaultName; save("droptray-device", device); };
+$("askPair").onclick = async () => {
+  $("devName").onchange(); $("askPair").disabled = true; $("pairWait").classList.remove("hidden");
+  try { if (await pair({})) { show("send"); renderLens(); heartbeat(); } } catch (e) { toast("PC unreachable"); }
+  $("askPair").disabled = false; $("pairWait").classList.add("hidden");
+};
+$("codePair").onclick = async () => {
+  $("devName").onchange(); const code = $("codeInput").value.trim(); if (!code) return;
+  try { if (await pair({ code })) { show("send"); renderLens(); heartbeat(); } } catch (e) { toast("PC unreachable"); }
+};
+
+// ---------- presence
+let lastShared = -1, paused = false;
+async function heartbeat() {
+  clearTimeout(heartbeat.t);
+  if (!key) return;
+  try {
+    const j = await (await api("/ping", { cache: "no-store" })).json();
+    if (j.paused !== paused) { paused = j.paused; if (!current) renderLens(true); }
+    setPill(j.name, j.paused ? "paused" : "connected", j.paused ? "warn" : "ok");
+    $("fromBadge").textContent = j.shared; $("fromBadge").classList.toggle("hidden", !j.shared);
+    if (tab === "from") { if (j.shared !== lastShared) loadShared(); loadClip(false); }
+    lastShared = j.shared;
+  } catch (e) { if (e.message !== "auth") setPill("PC offline", "", "bad"); }
+  heartbeat.t = setTimeout(heartbeat, document.hidden ? 15000 : 4000);
+}
+document.addEventListener("visibilitychange", () => { if (!document.hidden) heartbeat(); });
+
+// ---------- the lens: idle, waiting, sending, done
+let current = null, lastResult = null, lensQueued = false;
+const queue = [];
+function scheduleLens() {             // progress fires constantly; draw at most ~6 times a second
+  if (lensQueued) return;
+  lensQueued = true;
+  setTimeout(() => requestAnimationFrame(() => { lensQueued = false; renderLens(); }), 160);
+}
+function renderLens(force) {
+  const body = $("lensBody"), liq = $("liquid");
+  if (force) body.dataset.mode = "";
+  if (current) {
+    const b = current;
+    liq.classList.remove("hidden", "done");
+    liq.style.height = (b.state === "asking" ? 6 : Math.max(6, b.frac * 100)) + "%";
+    liq.classList.toggle("still", b.state !== "sending");
+    if (body.dataset.mode !== "batch") {
+      body.dataset.mode = "batch";
+      body.innerHTML = `<div class="row"><span class="sub grow" id="lTo"></span><button class="btn small danger" id="lCancel">Cancel</button></div>
+        <div class="row" style="align-items:flex-end;margin-top:12px"><span class="big" id="lPct"></span><span class="grow"></span><span class="sub" id="lCount" style="padding-bottom:6px"></span></div>
+        <div class="spacer"></div>
+        <div style="font-weight:600" id="lBytes"></div><div class="sub" id="lSpeed"></div><div class="now" id="lNow" style="margin-top:6px"></div>`;
+      $("lCancel").onclick = () => current && current.cancel();
+    }
+    $("lTo").textContent = "To " + (pc ? pc.name : "PC") + (queue.length ? `, ${queue.length} more waiting` : "");
+    if (b.state === "asking") {
+      $("lPct").innerHTML = `<span style="font-size:24px;letter-spacing:0">Waiting for the PC</span>`;
+      $("lCount").textContent = ""; $("lBytes").textContent = b.files.length + (b.files.length > 1 ? " items, " : " item, ") + fmtBytes(b.total);
+      $("lSpeed").textContent = "Accept on the PC to start"; $("lNow").textContent = "";
+    } else {
+      $("lPct").textContent = Math.floor(b.frac * 100) + "%";
+      $("lCount").textContent = `${Math.min(b.done + b.failed + 1, b.files.length)} of ${b.files.length}`;
+      $("lBytes").textContent = fmtBytes(b.sent) + " of " + fmtBytes(b.total);
+      $("lSpeed").textContent = [b.speed ? fmtBytes(b.speed) + "/s" : "", fmtEta((b.total - b.sent) / b.speed)].filter(Boolean).join(", ");
+      $("lNow").textContent = b.nowName || "";
+    }
+    return;
+  }
+  if (lastResult) {
+    if (body.dataset.mode === "done") return;
+    body.dataset.mode = "done";
+    const r = lastResult;
+    liq.classList.toggle("hidden", !r.ok); liq.classList.remove("still"); liq.classList.add("done"); liq.style.height = "100%";
+    body.innerHTML = `<div class="glyph" style="background:linear-gradient(160deg,#5be37d,var(--green))"><svg width="26" height="26"><use href="#i-${r.ok ? "check" : "x"}"/></svg></div>
+      <h3 style="margin-top:14px">${r.ok ? `Sent ${r.done} ${r.done === 1 ? "item" : "items"}` : esc(r.reason)}</h3>
+      <div class="sub">${r.ok ? `${fmtBytes(r.total)} at ${fmtBytes(r.avg)}/s to ${esc(pc.name)}${r.failed ? `, ${r.failed} failed` : ""}` : "Nothing was sent"}</div>
+      <div class="spacer"></div><button class="btn primary wide" id="lMore">Send more</button>`;
+    $("lMore").onclick = () => { lastResult = null; renderLens(); };
+    return;
+  }
+  liq.classList.add("hidden");
+  if (body.dataset.mode === "idle" + paused) return;
+  body.dataset.mode = "idle" + paused;
+  body.innerHTML = `<div class="row"><div class="glyph"><svg width="26" height="26"><use href="#i-up"/></svg></div>
+      <div class="grow"><h3>Send to ${esc(pc ? pc.name : "PC")}</h3><div class="sub">${paused ? "The PC paused receiving" : "Photos, videos, files: any number"}</div></div></div>
+    <div class="spacer"></div>
+    <button class="btn primary wide" id="lPick" ${paused ? "disabled" : ""}>Choose photos or files</button>
+    <div class="pastewrap"><svg width="18" height="18"><use href="#i-paste"/></svg>
+      <div class="pastebtn" id="lPaste" contenteditable="true" role="textbox" aria-label="Paste what you copied"
+           data-ph="Hold here, then tap Paste"></div></div>`;
+  $("lPick").onclick = () => $("fileInput").click();
+  wirePaste($("lPaste"));
+}
+
+$("fileInput").onchange = (ev) => { const files = Array.from(ev.target.files || []); ev.target.value = ""; if (files.length) enqueue(files); };
+function enqueue(files) { queue.push(files); lastResult = null; if (!current) next(); else renderLens(); }
+
+// ---------- paste: photos, files or text copied on the iPhone
+function wirePaste(el) {
+  const stamp = () => new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+  const named = (f, i) => f.name && !/^image\.(png|jpe?g|heic|gif)$/i.test(f.name) ? f
+    : new File([f], `Pasted ${stamp()}${i ? "-" + i : ""}.${(f.type.split("/")[1] || "png").replace("jpeg", "jpg")}`, { type: f.type });
+  const done = () => { el.textContent = ""; el.blur(); };
+  el.addEventListener("paste", (e) => {
+    const dt = e.clipboardData;
+    // Safari hands pasted photos over as files or as file items, depending on the source app
+    let files = Array.from(dt.files || []);
+    if (!files.length) files = Array.from(dt.items || []).filter((it) => it.kind === "file").map((it) => it.getAsFile()).filter(Boolean);
+    if (files.length) { e.preventDefault(); done(); enqueue(files.map(named)); return; }
+    const text = dt.getData("text/plain");
+    if (text && text.trim()) { e.preventDefault(); done(); sendText(text.trim()); return; }
+    // Otherwise let Safari insert it, then look for an image it placed in the field.
+    setTimeout(async () => {
+      const img = el.querySelector("img");
+      if (img && img.src) {
+        try {
+          const blob = await (await fetch(img.src)).blob();
+          enqueue([named(new File([blob], "image.png", { type: blob.type || "image/png" }), 0)]);
+        } catch (err) { toast("That image couldn't be read. Use Choose photos or files."); }
+      } else if (el.textContent.trim()) {
+        sendText(el.textContent.trim());
+      } else {
+        toast("Nothing a web page can send. For videos, use Choose photos or files.");
+      }
+      done();
+    }, 60);
+  });
+  // typing isn't what this field is for; only pasting gets through
+  el.addEventListener("beforeinput", (e) => { if (!/^insertFrom(Paste|Drop)/.test(e.inputType)) e.preventDefault(); });
+}
+
+// ---------- sending
+function makeRow(file, withThumb) {
+  const el = document.createElement("div"); el.className = "item";
+  if (withThumb && kindOf(file.name) === "image" && file.size < 25e6) {
+    const img = document.createElement("img"); img.className = "thumb"; img.loading = "lazy"; img.decoding = "async"; img.alt = "";
+    img.src = URL.createObjectURL(file); img.onload = () => URL.revokeObjectURL(img.src); img.onerror = () => img.outerHTML = badge(file.name);
+    el.append(img);
+  } else el.insertAdjacentHTML("beforeend", badge(file.name));
+  el.insertAdjacentHTML("beforeend", '<div class="info"><div class="name"></div><div class="meta">Waiting</div><div class="mini"><i></i></div></div><div class="state"></div>');
+  el.querySelector(".name").textContent = file.name;
+  return { el, meta: el.querySelector(".meta"), bar: el.querySelector(".mini i"), state: el.querySelector(".state") };
+}
+// rows exist only while the list is open: building 300 rows with photo previews is what made big batches slow
+let listOpen = false, rows = [], fileState = [];
+function buildList() {
+  const list = $("batchList"); list.innerHTML = ""; rows = [];
+  if (!listOpen || !current && !fileState.length) return;
+  fileState.forEach((st, i) => { const r = makeRow(st.file, i < 40); paintRow(r, st); rows[i] = r; list.append(r.el); });
+}
+function paintRow(r, st) {
+  if (!r) return;
+  r.bar.style.width = (st.done || st.fail ? 100 : 100 * st.loaded / Math.max(st.file.size, 1)) + "%";
+  r.meta.textContent = st.msg || (st.loaded ? fmtBytes(st.loaded) + " of " + fmtBytes(st.file.size) : "Waiting");
+  r.el.classList.toggle("done", !!st.done); r.el.classList.toggle("fail", !!st.fail);
+  r.state.textContent = st.done ? "✓" : st.fail ? "✕" : ""; r.state.style.color = st.done ? "var(--green)" : "var(--red)";
+}
+$("toggleList").onclick = () => {
+  listOpen = !listOpen; $("batchList").classList.toggle("hidden", !listOpen);
+  $("toggleList").textContent = listOpen ? "Hide" : "Show"; buildList();
+};
+
+async function next() {
+  const files = queue.shift();
+  if (!files) { current = null; renderLens(true); return; }
+  const total = files.reduce((a, f) => a + f.size, 0);
+  const b = current = { files, total, sent: 0, frac: 0, done: 0, failed: 0, speed: 0, state: "asking", xhrs: new Set(), cancelled: false, ticket: "" };
+  b.cancel = () => {
+    b.cancelled = true; b.xhrs.forEach((x) => x.abort());
+    if (b.ticket) api("/cancel", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ticket: b.ticket }) }).catch(() => {});
+  };
+  fileState = files.map((file) => ({ file, loaded: 0 }));
+  $("batchListCard").classList.remove("hidden"); $("batchListTitle").textContent = files.length + (files.length > 1 ? " files" : " file");
+  buildList(); renderLens(true);
+
+  let res;
+  try {
+    res = await (await api("/offer", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ device, files: files.map((f) => ({ name: f.name, size: f.size })) }) })).json();
+  } catch (e) { res = { ok: false, reason: e.message === "auth" ? "Not paired" : "PC unreachable" }; }
+  if (b.cancelled || !res.ok) {
+    lastResult = { ok: false, reason: b.cancelled ? "Cancelled" : res.reason || "Declined on the PC" };
+    fileState.forEach((st, i) => { st.fail = true; st.msg = lastResult.reason; paintRow(rows[i], st); });
+    current = null; return next();
+  }
+  b.ticket = res.ticket; b.state = "sending";
+  const t0 = performance.now();
+  let lastT = t0, lastB = 0;
+  const update = () => {
+    b.sent = fileState.reduce((a, st) => a + st.loaded, 0); b.frac = b.sent / Math.max(total, 1);
+    const now = performance.now();
+    if (now - lastT > 500) { const inst = (b.sent - lastB) / ((now - lastT) / 1000); b.speed = b.speed ? b.speed * .5 + inst * .5 : inst; lastT = now; lastB = b.sent; }
+    scheduleLens();
+  };
+  let idx = 0;
+  const worker = async () => {
+    while (!b.cancelled && idx < files.length) {
+      const i = idx++; b.nowName = files[i].name;
+      const ok = await upload(b, i, update);
+      if (ok) b.done++; else b.failed++;
+      update();
+    }
+  };
+  await Promise.all([worker(), worker()]);
+  const secs = (performance.now() - t0) / 1000;
+  lastResult = b.cancelled ? { ok: false, reason: "Cancelled" }
+    : { ok: b.done > 0, done: b.done, failed: b.failed, total: b.sent, avg: b.sent / Math.max(secs, .001), reason: "Nothing was sent" };
+  if (!b.cancelled && b.done) toast("Sent to " + pc.name);
+  current = null; next();
+}
+
+function upload(b, i, update) {
+  const file = b.files[i], st = fileState[i];
+  return new Promise((resolve) => {
+    const xhr = new XMLHttpRequest(); b.xhrs.add(xhr);
+    xhr.open("POST", "/upload");
+    xhr.setRequestHeader("X-Token", key); xhr.setRequestHeader("X-Ticket", b.ticket);
+    xhr.setRequestHeader("X-Device", device); xhr.setRequestHeader("X-Filename", encodeURIComponent(file.name));
+    xhr.setRequestHeader("Content-Type", "application/octet-stream");
+    xhr.upload.onprogress = (e) => { if (e.lengthComputable) { st.loaded = e.loaded; if (listOpen) paintRow(rows[i], st); update(); } };
+    const end = (ok, msg) => {
+      b.xhrs.delete(xhr); st.loaded = ok ? file.size : st.loaded; st.done = ok; st.fail = !ok; st.msg = msg;
+      paintRow(rows[i], st); resolve(ok);
+    };
+    xhr.onload = () => xhr.status === 200 ? end(true, "Sent, " + fmtBytes(file.size)) : end(false, xhr.responseText || "Failed");
+    xhr.onerror = () => end(false, "Connection lost");
+    xhr.onabort = () => end(false, "Cancelled");
+    xhr.send(file);
+  });
+}
+
+// ---------- text
+async function sendText(text) {
+  try {
+    const r = await (await api("/text", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text, device }) })).json();
+    toast(r.ok ? (r.copied ? "On the PC clipboard" : "Sent to the PC") : r.reason || "Failed");
+    return r.ok;
+  } catch (e) { toast("PC unreachable"); return false; }
+}
+$("textSend").onclick = async () => { const t = $("textIn").value.trim(); if (t && await sendText(t)) $("textIn").value = ""; };
+
+// ---------- from PC: its clipboard and what it shared
+let clipSeq = null, clipHidden = load("droptray-clip-hidden", null);
+async function loadClip(force) {
+  let c;
+  try { c = await (await api("/clipboard", { cache: "no-store" })).json(); } catch (e) { return; }
+  if (!force && c.seq === clipSeq) return;
+  clipSeq = c.seq;
+  const card = $("clipCard"), body = $("clipBody");
+  card.classList.toggle("hidden", c.enabled && (!c.kind || c.seq === clipHidden));
+  $("clipX").classList.toggle("hidden", !c.kind);
+  if (!c.enabled) {
+    body.innerHTML = `<p class="note" style="margin-top:6px">Turn on “Phone can see what I copy” in DropTray’s Phone tab to see the PC clipboard here.</p>`;
+    return;
+  }
+  if (c.kind === "text") {
+    body.innerHTML = `<div class="textitem" style="margin-top:10px"></div><div class="row" style="margin-top:12px">
+      ${/^https?:\/\/\S+$/.test(c.text) ? `<button class="btn small" id="clipOpen">Open</button>` : ""}<span class="grow"></span><button class="btn primary small" id="clipCopy">Copy</button></div>`;
+    body.querySelector(".textitem").textContent = c.text;
+    $("clipCopy").onclick = () => copyText(c.text);
+    const o = $("clipOpen"); if (o) o.onclick = () => window.open(c.text, "_blank");
+  } else if (c.kind === "image") {
+    const src = withKey("/clipboard/image?v=" + c.seq);
+    body.innerHTML = `<img class="clipimg" src="${src}" alt="Image copied on the PC" id="clipImg">`;
+    $("clipImg").onclick = () => openFile(src, "Copied image.png");
+  } else if (c.kind === "files") {
+    body.innerHTML = `<div class="list">${c.files.map((f) => `<div class="item">
+      ${f.thumb ? `<img class="thumb" src="${withKey("/clipboard/thumb/" + f.i + "?v=" + c.seq)}" alt="">` : badge(f.name)}
+      <div class="info"><div class="name">${esc(f.name)}</div><div class="meta">${fmtBytes(f.size)}</div></div>
+      <button class="btn small" data-f="${f.i}">${viewAs(f.name) ? "Open" : "Save"}</button></div>`).join("")}</div>`;
+    body.querySelectorAll("[data-f]").forEach((b) => b.onclick = () => {
+      const f = c.files[+b.dataset.f]; openFile(withKey("/clipboard/file/" + f.i), f.name);
+    });
+  }
+}
+$("clipX").onclick = () => { clipHidden = clipSeq; save("droptray-clip-hidden", clipHidden); $("clipCard").classList.add("hidden"); };
+async function loadShared() {
+  if (!key) return;
+  let items = [];
+  try { items = (await (await api("/shared", { cache: "no-store" })).json()).items; } catch (e) { return; }
+  const list = $("sharedList");
+  if (!items.length) { list.innerHTML = '<p class="note" style="padding:8px 0">Nothing yet. On the PC, drop files on DropTray, or send what you copied.</p>'; return; }
+  list.innerHTML = items.map((it, i) => {
+    const when = new Date(it.when * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    if (it.kind === "text") return `<div class="item"><div class="thumb" style="color:var(--cyan)"><svg width="22" height="22"><use href="#i-paste"/></svg></div>
+        <div class="info"><div class="textitem">${esc(it.text)}</div><div class="meta">${when}</div></div>
+        <button class="btn primary small" data-copy="${i}">Copy</button></div>`;
+    const th = it.thumb ? `<img class="thumb" loading="lazy" decoding="async" src="${withKey("/shared/" + it.id + "/thumb")}" alt="">` : badge(it.name);
+    return `<div class="item">${th}<div class="info"><div class="name">${esc(it.name)}</div><div class="meta">${fmtBytes(it.size)}, ${when}</div></div>
+      <button class="btn small" data-open="${i}">${viewAs(it.name) ? "Open" : "Save"}</button></div>`;
+  }).join("");
+  list.querySelectorAll("[data-copy]").forEach((b) => b.onclick = () => copyText(items[+b.dataset.copy].text));
+  list.querySelectorAll("[data-open]").forEach((b) => b.onclick = () => { const it = items[+b.dataset.open]; openFile(withKey("/shared/" + it.id), it.name); });
+}
+$("refreshShared").onclick = () => { loadShared(); loadClip(true); };
+
+// ---------- more
+function renderPcs() {
+  const list = $("pcList"); list.innerHTML = "";
+  const ids = Object.keys(pcs);
+  if (!ids.length) { list.innerHTML = '<p class="note">None yet.</p>'; return; }
+  for (const id of ids.sort((a, b) => (pcs[b].last || 0) - (pcs[a].last || 0))) {
+    const p = pcs[id], here = pc && id === pc.id;
+    const el = document.createElement("div"); el.className = "item";
+    el.innerHTML = `<div class="thumb" style="background:linear-gradient(160deg,var(--cyan),var(--blue));color:#fff"><svg width="22" height="22"><use href="#i-pc"/></svg></div>
+      <div class="info"><div class="name"></div><div class="meta">${here ? "Connected now" : "Last used " + (p.last ? new Date(p.last).toLocaleDateString() : "–")}</div></div>`;
+    el.querySelector(".name").textContent = p.name;
+    const b = document.createElement("button"); b.className = "btn small danger"; b.textContent = "Forget";
+    b.onclick = () => { if (confirm("Forget " + p.name + "? You'll need to pair again.")) { delete pcs[id]; save("droptray-pcs", pcs); if (here) forget(); else renderPcs(); } };
+    el.append(b); list.append(el);
+  }
+}
+$("speedBtn").onclick = async () => {
+  const btn = $("speedBtn"); btn.disabled = true; btn.textContent = "Testing";
+  try {
+    let best = Infinity;
+    for (let i = 0; i < 5; i++) { const t = performance.now(); await api("/ping", { cache: "no-store" }); best = Math.min(best, performance.now() - t); }
+    $("sPing").textContent = best.toFixed(0);
+    const downBytes = 32 * 1024 * 1024; let t0 = performance.now();
+    await (await api("/speedtest/down?bytes=" + downBytes, { cache: "no-store" })).arrayBuffer();
+    const down = downBytes * 8 / ((performance.now() - t0) / 1000) / 1e6; $("sDown").textContent = down.toFixed(0);
+    const blob = new Blob([new Uint8Array(16 * 1024 * 1024)]); t0 = performance.now();
+    await api("/speedtest/up", { method: "POST", body: blob });
+    const up = blob.size * 8 / ((performance.now() - t0) / 1000) / 1e6; $("sUp").textContent = up.toFixed(0);
+    api("/speedtest/result", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ device, up_mbps: up, down_mbps: down, ping_ms: best }) });
+  } catch (e) { toast("Speed test failed"); }
+  btn.disabled = false; btn.textContent = "Run speed test";
+};
+
+start();
+</script>
+</body>
+</html>
