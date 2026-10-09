@@ -10,6 +10,7 @@ page (one tap from the Home Screen) and sends over Wi-Fi to the PC, which asks y
 Files go straight from the phone to the PC on your network, with no cloud, account or upload limit.
 
 - [Install](#install)
+- [Updates](#updates)
 - [Get started](#get-started)
 - [What it does](#what-it-does)
 - [Privacy and security](#privacy-and-security)
@@ -34,6 +35,20 @@ The PowerShell script checks the download against the release's `SHA256SUMS.txt`
 **Uninstall:** Settings → Apps → DropTray, or
 `& ([scriptblock]::Create((irm https://raw.githubusercontent.com/TechnoQuantum/droptray/main/install.ps1))) -Uninstall`.
 Your settings and history stay in `%APPDATA%\DropTray`.
+
+## Updates
+
+DropTray updates itself. A little after it starts, and every 6 hours after that, it asks GitHub for the latest release.
+When there's a newer one, it:
+1. downloads it in the background and checks it against the release's `SHA256SUMS.txt`;
+2. waits until nothing is transferring and no request is waiting;
+3. installs it silently, then restarts.
+
+The next start shows *Updated to x.y.z* as a notification and in Recent activity. Settings → **Updates** shows your version, has **Check now** and **Install now**, and an
+**Update automatically** switch. The tray menu has *Check for updates*.
+
+It updates the way you installed: Setup.exe installs update with the new Setup.exe, and zip or script installs update from the new zip.
+To update by hand, run the installer or the PowerShell line again; both install over the old version and keep your settings.
 
 ## Get started
 
@@ -172,7 +187,9 @@ py -3.11 -m venv .venv
 | `web/drawer.html`, `web/widget.html` | The drawer and the widget |
 | `web/index.html` | The iPhone page |
 | `API.md` | The HTTP API: everything the iPhone page does, for a native iOS app later |
+| `updater.py` | Self-update from GitHub Releases: check, download, verify, install when idle, restart |
 | `installer/DropTray.iss`, `install.ps1` | Inno Setup installer, and the no-wizard install script |
+| `release.ps1` | One command to build and publish a release (`-Publish`); the version is `APP_VERSION` in `core.py` |
 | `packaging/winget` | winget manifests |
 | `SHORTCUT.md` | iOS Shortcuts: *Send to PC* in the Share sheet, and clipboard on Back Tap |
 

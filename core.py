@@ -35,6 +35,8 @@ except ImportError:          # HEIC thumbnails and conversion just won't happen
     pillow_heif = None
 
 APP = "DropTray"
+APP_VERSION = "1.0.1"          # the one place the version lives; release.ps1 and the installer read it
+REPO = "TechnoQuantum/droptray"
 AUMID = "DropTray.Receiver"
 HERE = Path(__file__).resolve().parent
 CONF_DIR = Path(os.environ.get("APPDATA", str(Path.home()))) / APP
@@ -212,7 +214,8 @@ def make_icon(size: int = 64, state: str = "idle") -> Image.Image:
 
 class Store:
     SETTINGS = ("port", "token", "save_dir", "auto_accept", "auto_copy", "convert_heic", "clip_sync",
-                "pc_id", "pc_name", "devices", "blocks", "keep_open", "widget", "widget_pos", "drawer_at", "glass")
+                "pc_id", "pc_name", "devices", "blocks", "keep_open", "widget", "widget_pos", "drawer_at", "glass",
+                "auto_update", "last_version")
     # When each Activity block shows: always, busy (while receiving), idle, or off.
     BLOCK_DEFAULTS = {"throughput": "busy", "totals": "always", "recent": "always", "connection": "off"}
 
@@ -234,6 +237,8 @@ class Store:
         self.widget = False                  # the desktop tile
         self.widget_pos: list | None = None  # its top-left, logical px
         self.glass = "frosted"               # window material: frosted (acrylic), clear, or mica
+        self.auto_update = True              # download and install new releases by itself
+        self.last_version = ""               # the version that ran last, to announce an update once
         self.drawer_at = "tray"              # where the drawer opens: "tray" (corner) or "widget" (beside it)
         self.totals = {"files": 0, "bytes": 0, "seconds": 0.0, "peak": 0.0}
         self.records: list[dict] = []
@@ -796,7 +801,7 @@ def make_handler(app: "App"):
                     return self.json(404, {"ok": False})
                 return self.send(200, f.read_bytes(), "image/png", headers={"Cache-Control": "max-age=86400"})
             if u.path == "/hello":                 # which PC is this? the page picks its key by id
-                body = {"app": APP, "api": API_VERSION, "features": FEATURES, "id": app.store.pc_id,
+                body = {"app": APP, "version": APP_VERSION, "api": API_VERSION, "features": FEATURES, "id": app.store.pc_id,
                         "name": app.store.pc_name, "mdns": app.mdns_ok}
                 return self.send(200, json.dumps(body).encode(), headers={"Access-Control-Allow-Origin": "*"})
             if not self.authed(q):

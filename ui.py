@@ -25,7 +25,8 @@ from PIL import ImageGrab
 import webview
 from webview.dom import DOMEventHandler
 
-from core import (APP, HERE, App, fmt_bytes, fmt_eta, fmt_speed, kind_of, log, make_icon, make_thumb, reveal)
+import updater
+from core import (APP, APP_VERSION, HERE, App, fmt_bytes, fmt_eta, fmt_speed, kind_of, log, make_icon, make_thumb, reveal)
 
 WIDTH, HEIGHT = 372, 580                      # logical pixels
 WIDGET = 64                                   # the desktop tile, logical pixels
@@ -232,6 +233,7 @@ class Api:
                                  else f"seen {ago(x.get('last_seen', 0))}")} for x in devices],
             "counts": counts, "version": st.version,
             "clip": self._clip_summary(), "today": self._today(), "events": self._events(),
+            "update": self._d.updater.status(),
         }
 
     def _today(self) -> str:
@@ -249,6 +251,12 @@ class Api:
 
     def dismiss_clip(self):
         self._d.app.dismiss_clip()
+
+    def update_check(self):
+        self._d.updater.check_now()
+
+    def update_install(self):
+        self._d.updater.install_now()
 
     def _clip_summary(self) -> dict | None:
         c = self._d.app.clip
@@ -394,7 +402,7 @@ class Api:
     # ---- settings
     def set_setting(self, key: str, value):
         st = self._d.app.store
-        if key in ("auto_accept", "convert_heic", "auto_copy", "clip_sync", "keep_open"):
+        if key in ("auto_accept", "convert_heic", "auto_copy", "clip_sync", "keep_open", "auto_update"):
             setattr(st, key, bool(value))
             if key == "clip_sync":
                 self._d.clip_last = self._d.app.pc_clip     # start with the next copy, not the current one
@@ -567,6 +575,7 @@ class Drawer:
         self.tray: pystray.Icon | None = None
         self._tray_state = None
         self.widget = None
+        self.updater = updater.Updater(app, restart=self.quit)
         self.window = webview.create_window(
             APP, url=str(HERE / "web" / "drawer.html"), js_api=Api(self), width=WIDTH, height=HEIGHT,
             frameless=True, transparent=True, resizable=False, on_top=True, easy_drag=False, x=-4000, y=-4000,
@@ -777,6 +786,7 @@ class Drawer:
                  checked=lambda i: store.auto_accept),
             item("Send copied item to phone", lambda: self.app.send_clip()),
             item("Open received folder", lambda: Api(self).open_folder()),
+            item("Check for updates", lambda: (self.updater.check_now(), self.show("settings"))),
             pystray.Menu.SEPARATOR,
             item("Quit", self.quit),
         )
@@ -887,6 +897,8 @@ class Drawer:
     def run(self):
         self._poll_clipboard()
         self._start_tray()
+        updater.note_updated(self.app)
+        self.updater.start()
         if self.app.store.widget:
             self.set_widget(True)
         threading.Thread(target=self._loop, daemon=True).start()

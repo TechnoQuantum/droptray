@@ -386,6 +386,13 @@
           <div class="srow" id="atRow"><div class="l">Open the drawer<div class="hint">From the tray icon and the widget alike</div></div>
             <select id="drawerAt"><option value="tray">Above the tray</option><option value="widget">Next to the widget</option></select></div>
         </div>
+        <div class="group-title">Updates</div>
+        <div class="group">
+          <div class="srow"><div class="l">DropTray <span id="verNow"></span><div class="hint" id="updText">Not checked yet</div></div>
+            <button class="btn small" id="updBtn">Check now</button></div>
+          <div class="srow"><div class="l">Update automatically<div class="hint">Downloads, verifies and installs new versions, then restarts when nothing is transferring</div></div>
+            <i class="tog" data-s="auto_update"></i></div>
+        </div>
         <div class="sfoot"><button class="btn danger small" id="clearHist">Clear history</button><button class="btn small" id="quitBtn">Quit DropTray</button></div>
       </div>
     </section>
@@ -560,7 +567,7 @@ function renderBlocks() {
 }
 $("recentAll").onclick = () => go("history");
 const EV = { received: ["in", "var(--blue)"], text: ["link", "var(--cyan)"], sent: ["up", "#bf5af2"],
-             downloaded: ["check", "var(--green)"], paired: ["phone", "var(--green)"], declined: ["x", "var(--red)"] };
+             downloaded: ["check", "var(--green)"], updated: ["in", "var(--green)"], paired: ["phone", "var(--green)"], declined: ["x", "var(--red)"] };
 
 function drawSpark() {
   const cv = $("spark");
@@ -749,6 +756,7 @@ function renderSettings() {
   document.querySelectorAll("[data-s]").forEach((t) => setToggle(t, t.dataset.s === "ask" ? !st.auto_accept : st[t.dataset.s]));
   document.querySelectorAll("[data-block]").forEach((s) => s.value = st.blocks[s.dataset.block]);
   $("saveDir").textContent = st.save_dir;
+  renderUpdate();
   $("glassSel").value = st.glass; document.body.dataset.glass = st.glass;
   $("drawerAt").value = st.drawer_at; $("atRow").classList.toggle("hidden", !st.widget);
   if (document.activeElement !== $("fName")) $("fName").value = S.pc.name;
@@ -763,6 +771,18 @@ $("chooseDir").onclick = () => api().choose_folder().then((d) => $("saveDir").te
 $("clearHist").onclick = () => confirmSheet("Clear the history?", "Totals reset too. Received files stay where they are.", "Clear history",
   () => api().clear_history().then(() => { histVer = -1; toast("History cleared"); }));
 $("quitBtn").onclick = () => api().quit();
+function renderUpdate() {
+  const u = S && S.update; if (!u) return;
+  $("verNow").textContent = u.current;
+  $("updText").textContent = u.text + (u.state === "current" && u.checked ? `, checked at ${u.checked}` : "")
+    + (!u.packaged && u.state === "available" ? ". Running from source: update with git pull" : "");
+  const ready = u.state === "ready" || (u.state === "available" && u.packaged);
+  $("updBtn").textContent = ready ? "Install now" : "Check now";
+  $("updBtn").disabled = ["checking", "downloading", "installing"].includes(u.state);
+  $("updBtn").classList.toggle("primary", ready);
+}
+$("updBtn").onclick = () => (/Install/.test($("updBtn").textContent) ? api().update_install() : api().update_check())
+  .then(() => setTimeout(() => tick().then(renderUpdate), 400));
 
 // ---------- sheets and menus
 function sheet(html) {
@@ -810,6 +830,7 @@ async function tick() {
   if (view === "activity") { renderLens(); renderBlocks(); }
   if (view === "history") loadHistory(false);
   if (view === "phone") { renderDevices(); renderClip(); loadPhone(false); }
+  if (view === "settings") renderUpdate();
 }
 let timer = null;
 function loop() { clearTimeout(timer); if (!shown) return; tick().finally(() => timer = setTimeout(loop, S && (S.busy || S.prompts.length) ? 300 : 700)); }

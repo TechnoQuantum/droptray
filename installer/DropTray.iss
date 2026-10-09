@@ -6,7 +6,10 @@
 ; %APPDATA%\DropTray and survive updates and uninstalling.
 
 #define AppName "DropTray"
-#define AppVersion "1.0.0"
+; release.ps1 passes /DAppVersion=<the version in core.py>
+#ifndef AppVersion
+  #define AppVersion "0.0.0-dev"
+#endif
 #define AppExe "DropTray.exe"
 
 [Setup]
