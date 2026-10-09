@@ -14,6 +14,6 @@ Dependencies:
 Installers:
   - Architecture: x64
     InstallerUrl: https://github.com/TechnoQuantum/droptray/releases/download/v1.0.1/DropTraySetup.exe
-    InstallerSha256: 21B72372D98B3A7A0E88CA5D2B580A94A561DA8947FC81233FB121757A2DD6BF
+    InstallerSha256: 299E1D714DBDED2E091A9D2812AA1C8CC99DD66D49441AF72931A971458F1011
 ManifestType: installer
 ManifestVersion: 1.6.0
