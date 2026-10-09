@@ -1,0 +1,25 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.6.0.schema.json
+PackageIdentifier: TechnoQuantum.DropTray
+PackageVersion: 1.0.0
+PackageLocale: en-US
+Publisher: TechnoQuantum
+PublisherUrl: https://github.com/TechnoQuantum
+PublisherSupportUrl: https://github.com/TechnoQuantum/droptray/issues
+PackageName: DropTray
+License: MIT
+LicenseUrl: https://github.com/TechnoQuantum/droptray/blob/main/LICENSE
+PackageUrl: https://github.com/TechnoQuantum/droptray
+ShortDescription: Send files, text and the clipboard between an iPhone and Windows over your local network.
+Description: |-
+  A tray app with a glass drawer for Windows 11, plus a web page for the iPhone (no app to install).
+  Accept or decline each transfer, see progress and speed, browse history, send files back to the phone,
+  share the clipboard both ways, and pair several phones and PCs that find each other with Bonjour.
+Tags:
+  - airdrop
+  - file-transfer
+  - iphone
+  - clipboard
+  - tray
+ReleaseNotesUrl: https://github.com/TechnoQuantum/droptray/releases/tag/v1.0.0
+ManifestType: defaultLocale
+ManifestVersion: 1.6.0

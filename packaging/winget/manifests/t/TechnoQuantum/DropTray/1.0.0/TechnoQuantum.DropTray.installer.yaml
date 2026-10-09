@@ -1,0 +1,19 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.installer.1.6.0.schema.json
+PackageIdentifier: TechnoQuantum.DropTray
+PackageVersion: 1.0.0
+MinimumOSVersion: 10.0.22000.0
+InstallerType: inno
+Scope: user
+InstallModes:
+  - interactive
+  - silent
+UpgradeBehavior: install
+Dependencies:
+  PackageDependencies:
+    - PackageIdentifier: Microsoft.EdgeWebView2Runtime
+Installers:
+  - Architecture: x64
+    InstallerUrl: https://github.com/TechnoQuantum/droptray/releases/download/v1.0.0/DropTraySetup.exe
+    InstallerSha256: D30E4CFAD097D9C91472AD514BA2F72DD9F922017DD0ABFE1AA13E9EA90B39BC
+ManifestType: installer
+ManifestVersion: 1.6.0

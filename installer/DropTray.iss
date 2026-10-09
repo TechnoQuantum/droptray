@@ -1,6 +1,6 @@
 ; Inno Setup script for DropTray. Build the app first (PyInstaller), then:
 ;   "%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe" installer\DropTray.iss
-; Produces installer\Output\DropTraySetup-<version>.exe
+; Produces installer\Output\DropTraySetup.exe (a stable name, so releases/latest/download links keep working)
 ;
 ; Installs for the current user only (no administrator prompt). Settings and history live in
 ; %APPDATA%\DropTray and survive updates and uninstalling.
@@ -22,7 +22,7 @@ DisableDirPage=yes
 DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
 OutputDir=Output
-OutputBaseFilename=DropTraySetup-{#AppVersion}
+OutputBaseFilename=DropTraySetup
 SetupIconFile=..\droptray.ico
 UninstallDisplayIcon={app}\{#AppExe}
 UninstallDisplayName={#AppName}
