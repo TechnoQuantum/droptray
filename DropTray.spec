@@ -5,6 +5,8 @@ from PyInstaller.utils.hooks import collect_all, collect_submodules
 datas = [("web", "web"), ("droptray.ico", ".")]
 binaries = []
 hiddenimports = collect_submodules("winrt") + ["clr", "ui", "core", "updater"]
+for pkg in ("cryptography",):
+    hiddenimports += collect_submodules(pkg)
 for pkg in ("webview", "clr_loader", "pythonnet", "windows_toasts", "pillow_heif", "zeroconf", "pystray"):
     d, b, h = collect_all(pkg)
     datas += d

@@ -1,23 +1,32 @@
 import Foundation
 
-/// Talks to DropTray on one PC over HTTP on the local network. Every call is described in API.md.
+/// Talks to DropTray on one PC over the local network. Every call is described in API.md.
+/// With a pinned fingerprint it uses HTTPS and accepts only that PC's certificate; without, plain HTTP.
 struct DTClient {
     let host: String                    // "192.168.1.20:8765" or "droptray.local:8765"
     var key: String = ""
     var device: String = DTStore.deviceName
+    var fp: String? = nil
 
-    static let session: URLSession = {
+    static var configuration: URLSessionConfiguration {
         let c = URLSessionConfiguration.default
         c.timeoutIntervalForRequest = 30
         c.requestCachePolicy = .reloadIgnoringLocalCacheData
         c.waitsForConnectivity = false
         c.httpMaximumConnectionsPerHost = 4
-        return URLSession(configuration: c)
-    }()
+        return c
+    }
+
+    /// Plain HTTP: only for PCs running a DropTray without HTTPS.
+    static let plain = URLSession(configuration: configuration)
+
+    var session: URLSession { fp.map { DTSessions.session(pinnedTo: $0) } ?? DTClient.plain }
+    var scheme: String { fp == nil ? "http" : "https" }
+    var encrypted: Bool { fp != nil }
 
     /// A URL on this PC, with the key as `t=`: images and downloads load without custom headers.
     func url(_ path: String, _ extra: [URLQueryItem] = []) -> URL {
-        var c = URLComponents(string: "http://\(host)\(path)")!
+        var c = URLComponents(string: "\(scheme)://\(host)\(path)")!
         var items = (c.queryItems ?? []) + extra
         if !key.isEmpty { items.append(URLQueryItem(name: "t", value: key)) }
         c.queryItems = items.isEmpty ? nil : items
@@ -40,7 +49,7 @@ struct DTClient {
         let data: Data
         let response: URLResponse
         do {
-            (data, response) = try await DTClient.session.data(for: r)
+            (data, response) = try await session.data(for: r)
         } catch {
             if (error as? URLError)?.code == .cancelled { throw CancellationError() }
             throw DTError.offline
@@ -78,7 +87,7 @@ struct DTClient {
     }
 
     func cancel(ticket: String) async {
-        _ = try? await DTClient.session.data(for: request("/cancel", method: "POST", json: ["ticket": ticket]))
+        _ = try? await session.data(for: request("/cancel", method: "POST", json: ["ticket": ticket]))
     }
 
     func sendText(_ text: String) async throws -> TextReply {
@@ -95,7 +104,7 @@ struct DTClient {
 
     /// Downloads something the PC offers into a temporary file named `name`.
     func download(_ path: String, name: String) async throws -> URL {
-        let (tmp, response) = try await DTClient.session.download(for: request(path, timeout: 900))
+        let (tmp, response) = try await session.download(for: request(path, timeout: 900))
         guard (response as? HTTPURLResponse)?.statusCode == 200 else {
             throw DTError.server("The PC doesn't share this any more.")
         }
@@ -117,14 +126,14 @@ struct DTClient {
         }
         let n = 32 * 1024 * 1024
         var t = Date()
-        let (down, _) = try await DTClient.session.data(for: request("/speedtest/down?bytes=\(n)", timeout: 120))
+        let (down, _) = try await session.data(for: request("/speedtest/down?bytes=\(n)", timeout: 120))
         let downMbps = Double(down.count) * 8 / Date().timeIntervalSince(t) / 1e6
         let blob = Data(count: 16 * 1024 * 1024)
         t = Date()
-        _ = try await DTClient.session.upload(for: request("/speedtest/up", method: "POST", timeout: 120), from: blob)
+        _ = try await session.upload(for: request("/speedtest/up", method: "POST", timeout: 120), from: blob)
         let upMbps = Double(blob.count) * 8 / Date().timeIntervalSince(t) / 1e6
         let result: [String: Any] = ["up_mbps": upMbps, "down_mbps": downMbps, "ping_ms": best, "device": device]
-        _ = try? await DTClient.session.data(for: request("/speedtest/result", method: "POST", json: result))
+        _ = try? await session.data(for: request("/speedtest/result", method: "POST", json: result))
         return (upMbps, downMbps, best)
     }
 }
@@ -138,7 +147,7 @@ enum DTLocator {
             for host in hosts {
                 group.addTask {
                     // The id check matters: droptray.local can be a different PC on another network.
-                    (try? await DTClient(host: host).hello(timeout: 2.5))?.id == pc.id ? host : nil
+                    (try? await DTClient(host: host, fp: pc.fp).hello(timeout: 2.5))?.id == pc.id ? host : nil
                 }
             }
             for await found in group {

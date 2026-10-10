@@ -7,6 +7,7 @@ struct PairedPC: Codable, Identifiable, Hashable {
     var key: String
     var lastHost: String        // "192.168.1.20:8765": where it answered last time
     var lastSeen: Date
+    var fp: String? = nil       // its certificate's SHA-256 fingerprint: set means HTTPS, pinned to it
 }
 
 // MARK: - API replies (see API.md in the repository)
@@ -18,6 +19,8 @@ struct HelloInfo: Decodable {
     let id: String
     let name: String
     let mdns: Bool?
+    let tls: Bool?
+    let fp: String?
 }
 
 struct PairReply: Decodable {

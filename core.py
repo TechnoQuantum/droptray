@@ -35,7 +35,7 @@ except ImportError:          # HEIC thumbnails and conversion just won't happen
     pillow_heif = None
 
 APP = "DropTray"
-APP_VERSION = "1.0.1"          # the one place the version lives; release.ps1 and the installer read it
+APP_VERSION = "1.0.2"          # the one place the version lives; release.ps1 and the installer read it
 REPO = "TechnoQuantum/droptray"
 AUMID = "DropTray.Receiver"
 HERE = Path(__file__).resolve().parent
@@ -50,7 +50,7 @@ MAX_TEXT = 100_000
 HISTORY_KEEP = 500
 MDNS_HOST = "droptray.local"
 API_VERSION = 1                # bump when an endpoint changes incompatibly; see API.md
-FEATURES = ["pair", "offer", "upload", "cancel", "text", "shared", "clipboard", "speedtest"]
+FEATURES = ["pair", "offer", "upload", "cancel", "text", "shared", "clipboard", "speedtest", "tls"]
 
 CONF_DIR.mkdir(parents=True, exist_ok=True)
 THUMBS.mkdir(parents=True, exist_ok=True)
@@ -802,7 +802,8 @@ def make_handler(app: "App"):
                 return self.send(200, f.read_bytes(), "image/png", headers={"Cache-Control": "max-age=86400"})
             if u.path == "/hello":                 # which PC is this? the page picks its key by id
                 body = {"app": APP, "version": APP_VERSION, "api": API_VERSION, "features": FEATURES, "id": app.store.pc_id,
-                        "name": app.store.pc_name, "mdns": app.mdns_ok}
+                        "name": app.store.pc_name, "mdns": app.mdns_ok,
+                        "tls": bool(app.tls_fp), "fp": app.tls_fp}
                 return self.send(200, json.dumps(body).encode(), headers={"Access-Control-Allow-Origin": "*"})
             if not self.authed(q):
                 return self.json(401, {"ok": False, "reason": "Wrong pairing code"})
@@ -1063,14 +1064,91 @@ def make_handler(app: "App"):
     return Handler
 
 
+def load_tls() -> tuple["ssl.SSLContext | None", str]:
+    """This PC's own certificate (made once, kept in %APPDATA%), and its SHA-256 fingerprint.
+
+    The iPhone app learns the fingerprint at pairing and then accepts this certificate only, so it needs
+    no certificate authority and shows no warnings. Browsers keep using plain HTTP."""
+    import ssl
+    folder = CONF_DIR / "tls"
+    cert, key = folder / "cert.pem", folder / "key.pem"
+    try:
+        if not (cert.exists() and key.exists()):
+            folder.mkdir(parents=True, exist_ok=True)
+            from cryptography import x509
+            from cryptography.hazmat.primitives import hashes, serialization
+            from cryptography.hazmat.primitives.asymmetric import ec
+            from cryptography.x509.oid import NameOID
+            import datetime
+            k = ec.generate_private_key(ec.SECP256R1())
+            name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "DropTray"),
+                              x509.NameAttribute(NameOID.ORGANIZATION_NAME, socket.gethostname()[:60] or "PC")])
+            now = datetime.datetime.now(datetime.timezone.utc)
+            c = (x509.CertificateBuilder().subject_name(name).issuer_name(name).public_key(k.public_key())
+                 .serial_number(x509.random_serial_number())
+                 .not_valid_before(now - datetime.timedelta(days=1))
+                 .not_valid_after(now + datetime.timedelta(days=3650))
+                 .add_extension(x509.SubjectAlternativeName([x509.DNSName(MDNS_HOST)]), critical=False)
+                 .sign(k, hashes.SHA256()))
+            key.write_bytes(k.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8,
+                                            serialization.NoEncryption()))
+            cert.write_bytes(c.public_bytes(serialization.Encoding.PEM))
+            log.info("made this PC's TLS certificate")
+        ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        ctx.minimum_version = ssl.TLSVersion.TLSv1_2
+        ctx.load_cert_chain(cert, key)
+        der = ssl.PEM_cert_to_DER_cert(cert.read_text("ascii"))
+        return ctx, hashlib.sha256(der).hexdigest()
+    except Exception as e:
+        log.warning("TLS unavailable, plain HTTP only: %s", e)
+        return None, ""
+
+
 class Server(ThreadingHTTPServer):
-    """Owns its port outright: Windows' SO_REUSEADDR would let a second DropTray share it silently."""
+    """Owns its port outright: Windows' SO_REUSEADDR would let a second DropTray share it silently.
+
+    Serves HTTP and HTTPS on the same port: a TLS connection always opens with a handshake record
+    (first byte 0x16), plain HTTP with a method name. One port, one firewall rule."""
     allow_reuse_address = False
     daemon_threads = True
+    tls = None
 
     def server_bind(self):
         self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
         super().server_bind()
+
+    def finish_request(self, request, client_address):
+        import ssl
+        try:
+            request.settimeout(20)
+            first = request.recv(1, socket.MSG_PEEK)
+        except OSError:
+            return
+        conn = request
+        if first == b"\x16" and self.tls is not None:
+            try:
+                conn = self.tls.wrap_socket(request, server_side=True)
+            except (ssl.SSLError, OSError) as e:
+                log.info("TLS handshake from %s failed: %s", client_address[0], e)
+                return
+        try:
+            conn.settimeout(None)
+            self.RequestHandlerClass(conn, client_address, self)
+        finally:
+            if conn is not request:
+                try:
+                    conn.close()
+                except OSError:
+                    pass
+
+    def handle_error(self, request, client_address):
+        """Phones vanish mid-request all the time (Wi-Fi, sleep): log quietly instead of printing tracebacks."""
+        import sys
+        e = sys.exc_info()[1]
+        if isinstance(e, (ConnectionError, TimeoutError, OSError)):
+            log.info("connection from %s ended: %s", client_address[0], e)
+        else:
+            log.exception("request from %s failed", client_address[0])
 
 
 # ---------------------------------------------------------------- the app
@@ -1101,11 +1179,13 @@ class App:
         make_icon(256).save(self.icon_png)
         self.notifier = Notifier(self.icon_png)
         self.server = Server(("0.0.0.0", int(self.store.port)), make_handler(self))
+        self.server.tls, self.tls_fp = load_tls()
 
     @property
     def url(self) -> str:
         """For the QR code: the IP always works; the page moves itself to droptray.local when it can."""
-        return f"http://{self.ip}:{self.store.port}/?pair={self.store.token}"
+        fp = f"&fp={self.tls_fp}" if self.tls_fp else ""    # lets the app verify the PC it pairs with
+        return f"http://{self.ip}:{self.store.port}/?pair={self.store.token}{fp}"
 
     @property
     def home_url(self) -> str:

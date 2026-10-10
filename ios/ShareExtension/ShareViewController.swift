@@ -161,7 +161,7 @@ struct ShareView: View {
 
     private func send() {
         guard let pc = chosen, let host else { return }
-        let client = DTClient(host: host, key: pc.key, device: DTStore.deviceName)
+        let client = DTClient(host: host, key: pc.key, device: DTStore.deviceName, fp: pc.fp)
         let texts = self.texts
         if !texts.isEmpty {
             Task {

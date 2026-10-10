@@ -18,6 +18,9 @@ It uses the same HTTP API as the web page ([API.md](../API.md)), so the PC side 
 - **Several PCs:** the header switches between them; the app finds whichever paired PC is reachable.
 - **Share extension:** in any app's Share sheet, pick DropTray and send to your PC without opening the app.
 - **More:** speed test, paired PCs (use or forget), this phone's name.
+- **Encrypted:** with DropTray 1.0.2 or later on the PC, everything goes over HTTPS pinned to that PC's own
+  certificate: no warnings, nothing to install, and another machine can't pretend to be your PC. Pairing from the
+  QR code verifies the certificate. Older pairings upgrade by themselves.
 - **Look:** Liquid Glass on iOS 26 and later (`glassEffect`, glass buttons), frosted material on iOS 17 to 25.
 
 ## Build it

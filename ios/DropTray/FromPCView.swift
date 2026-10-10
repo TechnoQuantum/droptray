@@ -74,9 +74,8 @@ struct FromPCView: View {
                         } label: { Label("Copy", systemImage: "doc.on.doc") }.primaryButton()
                     }
                 } else if clip.kind == "image", let client = model.client {
-                    let url = client.url("/clipboard/image", [URLQueryItem(name: "v", value: "\(clip.seq)")])
-                    AsyncImage(url: url) { image in
-                        image.resizable().scaledToFit()
+                    RemoteImage(client: client, path: "/clipboard/image", query: [URLQueryItem(name: "v", value: "\(clip.seq)")]) { image in
+                        Image(uiImage: image).resizable().scaledToFit()
                     } placeholder: {
                         ProgressView().frame(maxWidth: .infinity, minHeight: 120)
                     }
@@ -93,9 +92,8 @@ struct FromPCView: View {
                 } else if clip.kind == "files", let files = clip.files, let client = model.client {
                     ForEach(files) { f in
                         HStack(spacing: 12) {
-                            RemoteThumb(url: f.thumb == true ? client.url("/clipboard/thumb/\(f.i)",
-                                                                           [URLQueryItem(name: "v", value: "\(clip.seq)")]) : nil,
-                                        name: f.name)
+                            RemoteThumb(client: client, path: f.thumb == true ? "/clipboard/thumb/\(f.i)" : nil,
+                                        query: [URLQueryItem(name: "v", value: "\(clip.seq)")], name: f.name)
                             VStack(alignment: .leading) {
                                 Text(f.name).lineLimit(1)
                                 Text(Format.bytes(Int64(f.size))).font(.caption).foregroundStyle(.secondary)
@@ -132,7 +130,7 @@ struct FromPCView: View {
                             toast = "Copied"
                         } label: { Image(systemName: "doc.on.doc") }.primaryButton()
                     } else {
-                        RemoteThumb(url: item.thumb == true ? model.client?.url("/shared/\(item.id)/thumb") : nil, name: item.name)
+                        RemoteThumb(client: model.client, path: item.thumb == true ? "/shared/\(item.id)/thumb" : nil, name: item.name)
                         VStack(alignment: .leading) {
                             Text(item.name).lineLimit(1)
                             Text("\(Format.bytes(Int64(item.size))), \(Format.ago(Date(timeIntervalSince1970: item.when)))")

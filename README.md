@@ -160,7 +160,8 @@ Bonjour discovery, QR pairing and Liquid Glass. Build it yourself with Xcode: se
 - **You decide.** Every incoming batch asks first, unless you turn that off.
 - **Clipboard sharing is off by default.** A paired phone sees the PC clipboard only after you allow it.
 - **Firewall.** The optional rules open DropTray's ports on private networks only, never on public Wi-Fi.
-- The connection is plain HTTP on your LAN; use DropTray on networks you trust.
+- **Encryption.** The iPhone app uses HTTPS, pinned to the PC's own certificate (no warnings, nothing to install).
+  The browser page uses plain HTTP: on shared or work Wi-Fi, prefer the app.
 
 ## Limitations
 

@@ -12,12 +12,28 @@ Plain HTTP/1.1 with JSON, on TCP 8765 of the PC.
 `GET /hello` (no auth) identifies the PC; use `id` to pick the stored key when several PCs are paired:
 
 ```json
-{"app": "DropTray", "api": 1, "features": ["pair", "offer", ...], "id": "e676720b0973", "name": "Prometheus", "mdns": true}
+{"app": "DropTray", "version": "1.0.2", "api": 1, "features": ["pair", "offer", ..., "tls"], "id": "e676720b0973",
+ "name": "Prometheus", "mdns": true, "tls": true, "fp": "7a57b795…"}
 ```
+
+## Encryption (HTTPS on the same port)
+
+Port 8765 speaks both plain HTTP and HTTPS: a connection that opens with a TLS handshake is encrypted, anything
+else is plain HTTP. Browsers use HTTP; apps should use HTTPS.
+
+The PC has its own self-signed certificate (EC P-256, valid 10 years, kept in `%APPDATA%\DropTray\tls`). Its
+SHA-256 fingerprint (of the DER certificate, lowercase hex) is published three ways:
+- in the pairing QR code: `http://<ip>:8765/?pair=<code>&fp=<fingerprint>`, the trustworthy way;
+- in `/hello` as `"tls": true, "fp": "<fingerprint>"`;
+- as the certificate itself, during the TLS handshake.
+
+Clients pin it: accept exactly that certificate and nothing else, so no certificate authority is involved and
+no warning is ever shown. Pairing from the QR code verifies the fingerprint. Pairing without it records the
+certificate seen at that moment (trust on first use) and pins it from then on.
 
 ## Pairing and auth
 
-`POST /pair` (no auth), JSON `{"device": "Emre's iPhone", "code": "0B915C"}`:
+`POST /pair` (no auth), JSON `{"device": "My iPhone", "code": "0B915C"}`:
 - with `code`: pairs immediately if the code matches.
 - without `code`: the PC asks its user (Pair / Decline); the request waits up to 90 s.
 

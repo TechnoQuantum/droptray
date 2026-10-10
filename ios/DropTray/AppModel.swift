@@ -24,7 +24,7 @@ final class AppModel {
     /// A client for the PC that answers right now, or nil.
     var client: DTClient? {
         guard let pc = active, let host else { return nil }
-        return DTClient(host: host, key: pc.key, device: deviceName)
+        return DTClient(host: host, key: pc.key, device: deviceName, fp: pc.fp)
     }
 
     var statusText: String {
@@ -62,6 +62,7 @@ final class AppModel {
                 status = ping.paused ? .paused : .connected
                 sharedCount = ping.shared
                 touch(pc.id, host: client.host)
+                if pc.fp == nil { await upgradeToHTTPS(pc, host: client.host) }
                 return
             } catch DTError.notPaired {
                 forget(pc)
@@ -99,6 +100,20 @@ final class AppModel {
         }
     }
 
+    /// A pairing made before HTTPS existed (or with an older DropTray): once the PC offers HTTPS, pin its
+    /// certificate and use it from then on.
+    private func upgradeToHTTPS(_ pc: PairedPC, host: String) async {
+        guard !triedUpgrade.contains(pc.id) else { return }
+        triedUpgrade.insert(pc.id)
+        guard let contact = await DTSessions.firstContact(host: host), contact.hello.id == pc.id,
+              let i = pcs.firstIndex(where: { $0.id == pc.id }) else { return }
+        pcs[i].fp = contact.fingerprint
+        DTStore.savePCs(pcs)
+        if active?.id == pc.id { active = pcs[i] }
+    }
+
+    private var triedUpgrade: Set<String> = []
+
     private func touch(_ id: String, host: String) {
         guard let i = pcs.firstIndex(where: { $0.id == id }) else { return }
         let changed = pcs[i].lastHost != host || Date().timeIntervalSince(pcs[i].lastSeen) > 600
@@ -110,12 +125,27 @@ final class AppModel {
     // MARK: - Pairing
 
     /// Pairs with the PC at `host`: with a code at once, or by asking (the PC's user taps Pair).
-    func pair(host: String, code: String?) async throws {
-        let c = DTClient(host: host, device: deviceName)
-        let hello = try await c.hello(timeout: 5)
+    /// Over HTTPS when the PC offers it: `expected` (from the QR code) must match the certificate the PC
+    /// presents; without it, the certificate seen now is pinned (trust on first use).
+    func pair(host: String, code: String?, expected: String? = nil) async throws {
+        var fp: String?
+        let hello: HelloInfo
+        if let contact = await DTSessions.firstContact(host: host) {
+            if let expected, expected.lowercased() != contact.fingerprint {
+                throw DTError.server("This isn't the PC from the QR code: its certificate doesn't match. Nothing was paired.")
+            }
+            hello = contact.hello
+            fp = contact.fingerprint
+        } else if expected != nil {
+            throw DTError.server("Couldn't make an encrypted connection to the PC. Check that it's on this network.")
+        } else {
+            hello = try await DTClient(host: host, device: deviceName).hello(timeout: 5)   // a DropTray without HTTPS
+        }
+        let c = DTClient(host: host, device: deviceName, fp: fp)
         let reply = try await c.pair(code: code)
         guard reply.ok, let key = reply.key else { throw DTError.server(reply.reason ?? "The PC didn't pair") }
-        let pc = PairedPC(id: reply.id ?? hello.id, name: reply.name ?? hello.name, key: key, lastHost: host, lastSeen: .now)
+        let pc = PairedPC(id: reply.id ?? hello.id, name: reply.name ?? hello.name, key: key, lastHost: host,
+                          lastSeen: .now, fp: fp)
         pcs.removeAll { $0.id == pc.id }
         pcs.append(pc)
         DTStore.savePCs(pcs)

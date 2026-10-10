@@ -151,7 +151,7 @@ enum DTUpload {
         r.setValue(ticket, forHTTPHeaderField: "X-Ticket")
         r.setValue(f.name.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? "file", forHTTPHeaderField: "X-Filename")
         r.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
-        let (data, response) = try await DTClient.session.upload(for: r, fromFile: f.url, delegate: UploadProgress(progress))
+        let (data, response) = try await client.session.upload(for: r, fromFile: f.url, delegate: UploadProgress(progress))
         let code = (response as? HTTPURLResponse)?.statusCode ?? 0
         guard code == 200 else {
             let text = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)

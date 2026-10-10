@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 // MARK: - Glass
 
@@ -225,27 +226,65 @@ struct TypeBadge: View {
     }
 }
 
-/// A picture from the PC (thumbnail URL), or a type badge if there is none.
+/// A thumbnail from the PC, or a type badge if there is none.
 struct RemoteThumb: View {
-    let url: URL?
+    let client: DTClient?
+    let path: String?
+    var query: [URLQueryItem] = []
     let name: String
     var size: CGFloat = 46
 
     var body: some View {
-        if let url {
-            AsyncImage(url: url) { phase in
-                if let image = phase.image {
-                    image.resizable().scaledToFill()
-                } else {
-                    TypeBadge(name: name, size: size)
-                }
-            }
-            .frame(width: size, height: size)
-            .clipShape(RoundedRectangle(cornerRadius: size * 0.24, style: .continuous))
-        } else {
+        RemoteImage(client: client, path: path, query: query) { image in
+            Image(uiImage: image).resizable().scaledToFill()
+        } placeholder: {
             TypeBadge(name: name, size: size)
         }
+        .frame(width: size, height: size)
+        .clipShape(RoundedRectangle(cornerRadius: size * 0.24, style: .continuous))
     }
+}
+
+/// Loads an image from the PC through the client's own (pinned) session, with a small memory cache.
+struct RemoteImage<Content: View, Placeholder: View>: View {
+    let client: DTClient?
+    let path: String?
+    var query: [URLQueryItem] = []
+    @ViewBuilder var content: (UIImage) -> Content
+    @ViewBuilder var placeholder: () -> Placeholder
+    @State private var image: UIImage?
+
+    var body: some View {
+        Group {
+            if let image { content(image) } else { placeholder() }
+        }
+        .task(id: key) { await load() }
+    }
+
+    private var key: String {
+        guard let client, let path else { return "" }
+        return "\(client.host)\(path)?\(query.map { "\($0.name)=\($0.value ?? "")" }.joined(separator: "&"))"
+    }
+
+    private func load() async {
+        guard let client, let path else { image = nil; return }
+        if let cached = ImageCache.shared.object(forKey: key as NSString) { image = cached; return }
+        var r = client.request(path, timeout: 30)
+        r.url = client.url(path, query)
+        guard let result = try? await client.session.data(for: r),
+              (result.1 as? HTTPURLResponse)?.statusCode == 200,
+              let loaded = UIImage(data: result.0) else { return }
+        ImageCache.shared.setObject(loaded, forKey: key as NSString)
+        image = loaded
+    }
+}
+
+enum ImageCache {
+    static let shared: NSCache<NSString, UIImage> = {
+        let c = NSCache<NSString, UIImage>()
+        c.countLimit = 300
+        return c
+    }()
 }
 
 /// A short message that slides up from the bottom and goes away by itself.

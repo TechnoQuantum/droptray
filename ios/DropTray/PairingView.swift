@@ -16,6 +16,7 @@ struct PairingView: View {
         let host: String
         let name: String
         var code = ""
+        var fp: String? = nil       // from the QR code: the certificate pairing must find
     }
 
     var body: some View {
@@ -139,9 +140,10 @@ struct PairingView: View {
             return
         }
         let host = "\(h):\(url.port ?? 8765)"
-        let code = URLComponents(url: url, resolvingAgainstBaseURL: false)?
-            .queryItems?.first { $0.name == "pair" || $0.name == "t" }?.value ?? ""
-        target = Target(host: host, name: h, code: code)
+        let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+        let code = items.first { $0.name == "pair" || $0.name == "t" }?.value ?? ""
+        let fp = items.first { $0.name == "fp" }?.value
+        target = Target(host: host, name: h, code: code, fp: fp)
     }
 }
 
@@ -200,7 +202,7 @@ struct PairSheet: View {
         error = nil
         Task {
             do {
-                try await model.pair(host: target.host, code: code)
+                try await model.pair(host: target.host, code: code, expected: target.fp)
                 dismiss()
                 onPaired()
             } catch {
