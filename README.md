@@ -135,8 +135,10 @@ picks the right key by itself. A new PC pairs with one tap on the phone and one 
 
 ![The widget: ready, receiving, waiting for you](docs/images/widget.png)
 
-An optional glass tile for the desktop: Settings → *Desktop widget*. It sits beneath every window, so you only see
-it on the desktop and never over an app or a game. A ring fills while receiving, and an orange badge counts requests
+An optional round glass widget for the desktop: Settings → *Desktop widget*. It sits beneath every window, so you
+only see it on the desktop and never over an app or a game. Its ring shows what's happening: **green** while receiving
+(filling with progress, then a full green flash when done), **blue** while the phone downloads something you shared,
+a **yellow half ring** when the clipboard syncs, **red** when a transfer fails, and an **orange** badge counting requests
 waiting for you. Drag it anywhere; click it to open the drawer. Set *Open the drawer* to *Next to the widget* to have
 the drawer appear beside it.
 

@@ -545,9 +545,26 @@ class WidgetApi:
             done = b.done_bytes + sum(t.done for t in active if t.batch is b)
             frac = min(done / b.bytes, 1) if b.bytes else 0.0
         pending = len(app.gate.pending)
-        state = ("paused" if app.gate.paused else "ask" if pending else "busy" if active or batches else "idle")
+        outgoing = list(app.outgoing.values())
+        flash = app.flashed["kind"] if time.time() < app.flashed["until"] else ""
+        if app.gate.paused:
+            state = "paused"
+        elif pending:
+            state = "ask"
+        elif active or batches:
+            state = "recv"                                   # phone -> PC: green
+        elif outgoing:
+            state = "send"                                   # PC -> phone: blue
+            total = sum(o[1] for o in outgoing)
+            frac = sum(o[0] for o in outgoing) / total if total else 0.0
+        elif flash:
+            state = flash                                    # clip (yellow), done (green), error (red)
+        else:
+            state = "idle"
         tip = {"paused": "DropTray: paused", "ask": "DropTray: waiting for you",
-               "busy": f"DropTray: receiving, {frac:.0%}", "idle": "DropTray: ready"}[state]
+               "recv": f"DropTray: receiving, {frac:.0%}", "send": f"DropTray: sending to your phone, {frac:.0%}",
+               "clip": "DropTray: clipboard synced", "done": "DropTray: received", "error": "DropTray: a transfer failed",
+               "idle": "DropTray: ready"}[state]
         return {"state": state, "frac": round(frac, 3), "pending": pending, "tip": tip}
 
     def widget_press(self):
@@ -575,6 +592,7 @@ class Drawer:
         self.tray: pystray.Icon | None = None
         self._tray_state = None
         self.widget = None
+        self._shaped = 0
         self.updater = updater.Updater(app, restart=self.quit)
         self.window = webview.create_window(
             APP, url=str(HERE / "web" / "drawer.html"), js_api=Api(self), width=WIDTH, height=HEIGHT,
@@ -700,11 +718,21 @@ class Drawer:
 
     def _widget_loaded(self):
         glass(self.widget)
+        self._widget_bottom()
+
+    def _widget_shape(self):
+        """Keep the widget a WIDGET-sized circle. Setting up the glass makes WinForms recreate the window at its
+        own minimum width (about 120 px), so check and restore the size and the round shape whenever they drift."""
         hwnd = self.widget.native.Handle.ToInt32()
         size = int(WIDGET * (user32.GetDpiForWindow(hwnd) or 96) / 96)
-        # WinForms keeps borderless windows at least ~120 px wide; set the real size underneath it
+        r = window_rect(hwnd)
+        if r.right - r.left == size and r.bottom - r.top == size and self._shaped == hwnd:
+            return
         user32.SetWindowPos(hwnd, 1, 0, 0, size, size, 0x0002 | 0x0010)
-        self._widget_bottom()
+        dwmapi.DwmSetWindowAttribute(hwnd, 33, ctypes.byref(ctypes.c_int(1)), 4)   # no corner rounding: the region does it
+        region = ctypes.windll.gdi32.CreateEllipticRgn(0, 0, size + 1, size + 1)
+        user32.SetWindowRgn(hwnd, region, True)                                  # Windows owns the region now
+        self._shaped = hwnd
 
     def _widget_default(self) -> tuple[int, int]:
         rect = wt.RECT()
@@ -716,6 +744,7 @@ class Drawer:
         """Below every window: the tile is seen on the desktop and never over an app or a game."""
         if self.widget is not None and self.app.store.widget:
             try:
+                self._widget_shape()
                 user32.SetWindowPos(self.widget.native.Handle.ToInt32(), 1, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010)
             except Exception:
                 pass

@@ -209,6 +209,12 @@
   .srow .l { flex: 1; min-width: 0; }
   .srow .hint { font-size: 11px; color: var(--ink2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   select, .field { font: inherit; color: var(--ink); background: var(--panel2); border: 1px solid var(--stroke); border-radius: 6px; height: 24px; padding: 0 6px; }
+  select { background-color: #2c2c32; color: #f5f5f7; }
+  select option { background-color: #2c2c32; color: #f5f5f7; }
+  @media (prefers-color-scheme: light) {
+    select { background-color: #ffffff; color: #1d1d1f; }
+    select option { background-color: #ffffff; color: #1d1d1f; }
+  }
   .field { width: 130px; user-select: text; }
   .field.code { width: 92px; text-transform: uppercase; letter-spacing: 1px; font-weight: 600; }
   .sfoot { display: flex; gap: 8px; justify-content: space-between; padding: 14px 0 4px; }

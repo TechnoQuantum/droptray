@@ -35,7 +35,7 @@ except ImportError:          # HEIC thumbnails and conversion just won't happen
     pillow_heif = None
 
 APP = "DropTray"
-APP_VERSION = "1.0.2"          # the one place the version lives; release.ps1 and the installer read it
+APP_VERSION = "1.0.3"          # the one place the version lives; release.ps1 and the installer read it
 REPO = "TechnoQuantum/droptray"
 AUMID = "DropTray.Receiver"
 HERE = Path(__file__).resolve().parent
@@ -776,9 +776,14 @@ def make_handler(app: "App"):
             self.send_header("Cache-Control", "no-store")
             self.send_header("Content-Disposition", disposition)
             self.end_headers()
-            with open(path, "rb") as f:
-                while c := f.read(CHUNK):
-                    self.wfile.write(c)
+            out = app.outgoing.setdefault(uuid.uuid4().hex, [0, size])
+            try:
+                with open(path, "rb") as f:
+                    while c := f.read(CHUNK):
+                        self.wfile.write(c)
+                        out[0] += len(c)
+            finally:
+                app.outgoing = {k: v for k, v in app.outgoing.items() if v is not out}
 
         # ---- routes
         def do_GET(self):
@@ -814,6 +819,9 @@ def make_handler(app: "App"):
                                        "device": dev["name"] if isinstance(dev, dict) else ""})
             if u.path == "/clipboard":           # the PC clipboard, if the user lets phones see it
                 pub = app.clip_public()
+                if pub.get("kind") and pub["seq"] != app.clip_seen:
+                    app.clip_seen = pub["seq"]
+                    app.flash("clip")
                 if q.get("plain"):                 # the "Paste from PC" Shortcut
                     return self.send(200, (pub.get("text") or "").encode("utf-8"), "text/plain; charset=utf-8")
                 return self.json(200, pub)
@@ -1168,6 +1176,9 @@ class App:
         self.pc_clip = ""                    # latest PC clipboard text, kept by the UI thread
         self.clip = {"seq": 0, "kind": None, "text": "", "files": [], "image": ""}
         self.clip_dismissed = -1             # the drawer hides the copied-item card for this clipboard
+        self.clip_seen = -1                  # the clipboard a phone fetched last (a new one flashes the widget)
+        self.outgoing: dict = {}             # downloads to phones in progress: id -> [bytes sent, size]
+        self.flashed = {"kind": "", "until": 0.0}
         self._downloads: dict = {}
         self.pairing_ips: set[str] = set()
         self.ui_visible = False                      # the drawer sets this while it is on screen
@@ -1283,10 +1294,15 @@ class App:
             self._batch_done(b)
         self.ui(("busy", None))
 
+    def flash(self, kind: str, seconds: float = 4.0):
+        """A brief state for the desktop widget: clip (yellow), done (green), error (red)."""
+        self.flashed = {"kind": kind, "until": time.time() + seconds}
+
     def _batch_done(self, b: Batch):
         with self.lock:
             if self.batches.pop(b.id, None) is None:
                 return
+        self.flash("error" if b.failed or b.cancelled or not b.saved else "done", 6.0 if b.failed or not b.saved else 3.0)
         took = max(time.perf_counter() - b.start, 1e-3)
         if not b.saved:
             if not b.cancelled:
@@ -1354,6 +1370,7 @@ class App:
     # ---- text and sharing
     def receive_text(self, text: str, device: str):
         self.store.add_text(text, device)
+        self.flash("clip")
         is_link = bool(re.fullmatch(r"https?://\S+", text))
         self.store.add_event("text", f"{'Link' if is_link else 'Text'} from {device}", text[:200],
                              link=text if is_link else "")
