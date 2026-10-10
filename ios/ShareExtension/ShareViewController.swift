@@ -133,8 +133,8 @@ struct ShareView: View {
     private func prepare() async {
         for provider in providers {
             switch await DTOutgoing.load(provider) {
-            case .file(let f): files.append(f)
-            case .text(let t): texts.append(t)
+            case .file(let f)?: files.append(f)
+            case .text(let t)?: texts.append(t)
             case nil: break
             }
         }

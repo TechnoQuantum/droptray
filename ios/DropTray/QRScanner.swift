@@ -64,6 +64,7 @@ struct QRScanner: UIViewControllerRepresentable {
             output.metadataObjectTypes = [.qr]
             let layer = AVCaptureVideoPreviewLayer(session: session)
             layer.videoGravity = .resizeAspectFill
+            layer.frame = view.bounds
             view.layer.addSublayer(layer)
             preview = layer
             DispatchQueue.global(qos: .userInitiated).async { [session] in session.startRunning() }

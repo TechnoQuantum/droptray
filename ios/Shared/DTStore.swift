@@ -1,6 +1,5 @@
 import Foundation
 import Security
-import UIKit
 
 /// Paired PCs and this phone's name. They live in the Keychain, in a group the app and the
 /// Share extension both belong to, so pairing once works in both.
@@ -30,9 +29,9 @@ enum DTStore {
         set { write("device", Data(newValue.utf8)) }
     }
 
-    static var defaultName: String {
-        UIDevice.current.userInterfaceIdiom == .pad ? "iPad" : "iPhone"
-    }
+    /// Not UIDevice: that is main-thread only, and clients read this from background tasks.
+    /// The name is editable in More.
+    static let defaultName = "iPhone"
 
     // MARK: - Keychain
 
