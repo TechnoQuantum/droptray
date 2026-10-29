@@ -42,6 +42,9 @@ kernel32.GlobalAlloc.argtypes = [ctypes.c_uint, ctypes.c_size_t]
 kernel32.GlobalLock.restype = ctypes.c_void_p
 kernel32.GlobalLock.argtypes = [ctypes.c_void_p]
 kernel32.GlobalUnlock.argtypes = [ctypes.c_void_p]
+kernel32.OpenProcess.restype = ctypes.c_void_p
+kernel32.WaitForSingleObject.argtypes = [ctypes.c_void_p, ctypes.c_uint]
+kernel32.CloseHandle.argtypes = [ctypes.c_void_p]
 CF_UNICODETEXT = 13
 
 
@@ -127,6 +130,32 @@ def recycle(path: Path):
     subprocess.run(["powershell", "-NoProfile", "-Command", cmd], creationflags=subprocess.CREATE_NO_WINDOW)
 
 
+def process_alive(pid: int) -> bool:
+    h = kernel32.OpenProcess(0x00100000, False, pid)            # SYNCHRONIZE
+    if not h:
+        return False
+    try:
+        return kernel32.WaitForSingleObject(h, 0) == 0x102      # WAIT_TIMEOUT: still running
+    finally:
+        kernel32.CloseHandle(h)
+
+
+def relaunch_after_exit():
+    """Start DropTray again once this process has ended, from a hidden PowerShell that outlives it."""
+    cmd = launch_command()
+    exe, _, args = cmd[1:].partition('"')
+    args = args.strip()
+    ps = (f"Wait-Process -Id {os.getpid()} -Timeout 20 -ErrorAction SilentlyContinue; "
+          f"Start-Process -FilePath '{exe.replace(chr(39), chr(39) * 2)}'"
+          + (f" -ArgumentList '{args.replace(chr(39), chr(39) * 2)}'" if args else ""))
+    flags = subprocess.CREATE_NO_WINDOW | subprocess.CREATE_NEW_PROCESS_GROUP | 0x01000000   # BREAKAWAY_FROM_JOB
+    full = ["powershell", "-NoProfile", "-WindowStyle", "Hidden", "-Command", ps]
+    try:
+        subprocess.Popen(full, creationflags=flags, close_fds=True)
+    except OSError:
+        subprocess.Popen(full, creationflags=flags & ~0x01000000, close_fds=True)
+
+
 def day_label(ts: float) -> str:
     d, today = time.localtime(ts), time.localtime()
     if (d.tm_year, d.tm_yday) == (today.tm_year, today.tm_yday):
@@ -210,7 +239,8 @@ class Api:
         sp = st.speedtest
         return {
             "status": status, "paused": gate.paused, "busy": bool(active or batches),
-            "pc": {"name": st.pc_name, "ip": app.ip, "port": st.port, "link": app.link, "mdns": app.mdns_ok},
+            "pc": {"name": st.pc_name, "ip": app.ip, "port": st.port, "port_pinned": st.port_pinned, "link": app.link,
+                   "mdns": app.mdns_ok},
             "settings": {"auto_accept": st.auto_accept, "convert_heic": st.convert_heic, "auto_copy": st.auto_copy,
                          "clip_sync": st.clip_sync, "keep_open": st.keep_open, "startup": d.startup,
                          "widget": st.widget, "drawer_at": st.drawer_at, "glass": st.glass,
@@ -442,6 +472,16 @@ class Api:
                 return "Use 4 to 12 letters or digits."
             st.token = code
             st.save_conf()
+        elif key == "port":
+            if str(value).strip().lower() in ("", "auto"):
+                return self._d.app.change_port(0)
+            try:
+                port = int(value)
+            except (TypeError, ValueError):
+                port = 0
+            if not 1024 <= port <= 65535:
+                return "Use a port from 1024 to 65535, or auto."
+            return self._d.app.change_port(port)
         return ""
 
     def new_code(self) -> str:
@@ -593,6 +633,9 @@ class Drawer:
         self._tray_state = None
         self.widget = None
         self._shaped = 0
+        self.web_pids: set[int] = set()        # WebView2 browser processes drawing our windows
+        self.started = time.monotonic()
+        self.recovering = False
         self.updater = updater.Updater(app, restart=self.quit)
         self.window = webview.create_window(
             APP, url=str(HERE / "web" / "drawer.html"), js_api=Api(self), width=WIDTH, height=HEIGHT,
@@ -719,6 +762,45 @@ class Drawer:
     def _widget_loaded(self):
         glass(self.widget)
         self._widget_bottom()
+        self._watch_webview(self.widget)
+
+    # ---- WebView2 health
+    def _watch_webview(self, window):
+        """Note which WebView2 browser process draws this window, and hear when a page crashes. Without this, a
+        browser process that dies (killed, crashed, updated under us) leaves empty dark windows until a restart."""
+        import System
+        form = window.native
+
+        def hook():
+            core = form.browser.webview.CoreWebView2
+            self.web_pids.add(int(core.BrowserProcessId))
+
+            def failed(sender, args):
+                kind = int(args.ProcessFailedKind)
+                log.warning("WebView2 process failed (kind %s) in %s", kind, window.title)
+                if kind == 0:                                    # BrowserProcessExited: nothing left to reload
+                    threading.Thread(target=self.recover, args=("the browser process exited",), daemon=True).start()
+                else:                                            # a page's renderer: reload just that page
+                    form.BeginInvoke(System.Action(lambda: form.browser.webview.Reload()))
+            core.ProcessFailed += failed
+        try:
+            form.Invoke(System.Action(hook))
+        except Exception as e:
+            log.info("could not watch WebView2: %s", e)
+
+    def _check_webview(self):
+        if self.web_pids and not all(process_alive(p) for p in self.web_pids):
+            self.recover("the WebView2 browser process is gone")
+
+    def recover(self, why: str):
+        """Restart DropTray so its windows draw again. Not in the first minute, so a broken WebView2 can't loop."""
+        if self.recovering or self.quitting or time.monotonic() - self.started < 60:
+            return
+        self.recovering = True
+        log.warning("restarting: %s", why)
+        relaunch_after_exit()
+        threading.Timer(5, lambda: os._exit(0)).start()         # if closing the dead windows hangs
+        self.quit()
 
     def _widget_shape(self):
         """Keep the widget a WIDGET-sized circle. Setting up the glass makes WinForms recreate the window at its
@@ -787,6 +869,7 @@ class Drawer:
         except Exception:
             import traceback
             log.error("on_loaded failed: %s", traceback.format_exc())
+        self._watch_webview(self.window)
 
         def on_drop(e):
             files = (e.get("dataTransfer") or {}).get("files") or []
@@ -863,6 +946,7 @@ class Drawer:
                 last_prune = now
                 self.app.prune_batches()
                 self.app.check_network()
+                self._check_webview()
             if self.tray:
                 self._set_tray()
             if self.widget is not None and now - last_bottom > 0.5:

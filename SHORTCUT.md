@@ -6,7 +6,7 @@ Run `setup-firewall.ps1` once on each PC so the phone can reach it.
 ## 1. The DropTray page (recommended, no setup)
 
 1. In DropTray → **Phone** tab, scan the QR code with the iPhone camera.
-2. The page pairs itself and moves to **`http://droptray.local:8765`**.
+2. The page pairs itself and moves to **`http://droptray.local:47820`**.
 3. In Safari: **Share → Add to Home Screen**.
 
 That one Home Screen icon works with **every PC you pair**: at home it opens the home PC,
@@ -30,7 +30,7 @@ Puts **Send to PC** in the Share sheet of Photos, Files, Safari and other apps.
 2. **ⓘ** → turn on **Show in Share Sheet** (Images, Media, Files, URLs, PDFs).
 3. Add **Repeat with Each** → *Shortcut Input*.
 4. Inside it, **Get Contents of URL**:
-   - URL `http://droptray.local:8765/upload`
+   - URL `http://droptray.local:47820/upload`
    - Method **POST**
    - Headers: `X-Token` = your pairing code, `X-Device` = `iPhone`
    - Request Body **Form**: field type **File**, key `file`, value *Repeat Item*
@@ -42,13 +42,13 @@ Tip: in the drawer menu (`⋯`) → **Set pairing code…** to give your home an
 
 **Copy to PC** (iPhone clipboard → PC clipboard):
 1. New shortcut `Copy to PC`. Add **Get Clipboard**.
-2. Add **Get Contents of URL**: `http://droptray.local:8765/text`, Method **POST**,
+2. Add **Get Contents of URL**: `http://droptray.local:47820/text`, Method **POST**,
    Headers `X-Token` = pairing code, `X-Device` = `iPhone`, Request Body **File** → *Clipboard*.
 
 **Paste from PC** (PC clipboard → iPhone clipboard). First turn on **Phone can see what I copy**
 in DropTray's Phone tab; until then the PC keeps its clipboard to itself.
 1. New shortcut `Paste from PC`.
-2. Add **Get Contents of URL**: `http://droptray.local:8765/clipboard?plain=1`,
+2. Add **Get Contents of URL**: `http://droptray.local:47820/clipboard?plain=1`,
    Header `X-Token` = pairing code.
 3. Add **Copy to Clipboard**.
 
@@ -64,6 +64,8 @@ Without Shortcuts:
 
 ## If the phone can't connect
 
+- `47820` above is DropTray's usual port. If another app took it, DropTray picked another: see Settings → **Port**
+  in the drawer and use that number in the Shortcuts.
 - Run `setup-firewall.ps1` (it asks for administrator).
 - The phone must be on the same network, not mobile data or a guest Wi-Fi.
 - If `droptray.local` doesn't open, use the IP address shown under the QR code.

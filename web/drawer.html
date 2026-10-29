@@ -381,6 +381,8 @@
           <div class="srow"><div class="l">Name<div class="hint">Phones see this</div></div><input class="field" id="fName" maxlength="40" spellcheck="false"></div>
           <div class="srow"><div class="l">Pairing code<div class="hint" id="codeHint">Same code on two PCs lets one Shortcut work with both</div></div>
             <input class="field code" id="fCode" maxlength="12" spellcheck="false"><button class="btn small" id="newCode">New</button></div>
+          <div class="srow"><div class="l">Port<div class="hint" id="portHint">Picked by DropTray; a taken port moves by itself</div></div>
+            <input class="field code" id="fPort" maxlength="5" inputmode="numeric" spellcheck="false"><button class="btn small" id="autoPort">Auto</button></div>
         </div>
         <div class="group-title">General</div>
         <div class="group">
@@ -573,7 +575,7 @@ function renderBlocks() {
 }
 $("recentAll").onclick = () => go("history");
 const EV = { received: ["in", "var(--blue)"], text: ["link", "var(--cyan)"], sent: ["up", "#bf5af2"],
-             downloaded: ["check", "var(--green)"], updated: ["in", "var(--green)"], paired: ["phone", "var(--green)"], declined: ["x", "var(--red)"] };
+             downloaded: ["check", "var(--green)"], updated: ["in", "var(--green)"], paired: ["phone", "var(--green)"], declined: ["x", "var(--red)"], port: ["gear", "var(--orange, #ff9f0a)"] };
 
 function drawSpark() {
   const cv = $("spark");
@@ -767,11 +769,17 @@ function renderSettings() {
   $("drawerAt").value = st.drawer_at; $("atRow").classList.toggle("hidden", !st.widget);
   if (document.activeElement !== $("fName")) $("fName").value = S.pc.name;
   if (document.activeElement !== $("fCode")) $("fCode").value = st.token;
+  if (document.activeElement !== $("fPort")) $("fPort").value = S.pc.port;
+  $("portHint").textContent = S.pc.port_pinned ? "Set by you. The iPhone app follows; Safari needs the QR again"
+                                               : "Picked by DropTray; a taken port moves by itself";
 }
 $("glassSel").onchange = () => { document.body.dataset.glass = $("glassSel").value; api().set_setting("glass", $("glassSel").value).then(tick); };
 $("drawerAt").onchange = () => api().set_setting("drawer_at", $("drawerAt").value).then(tick);
 $("fName").onchange = () => api().set_setting("pc_name", $("fName").value).then(() => { toast("Name saved"); tick(); });
 $("fCode").onchange = () => api().set_setting("token", $("fCode").value).then((err) => { toast(err || "Pairing code saved"); tick().then(renderSettings); });
+const setPort = (v) => api().set_setting("port", v).then((err) => tick().then(() => { renderSettings(); toast(err || "Now receiving on port " + S.pc.port); }));
+$("fPort").onchange = () => setPort($("fPort").value);
+$("autoPort").onclick = () => setPort("auto");
 $("newCode").onclick = () => api().new_code().then((c) => { $("fCode").value = c; toast("New pairing code"); });
 $("chooseDir").onclick = () => api().choose_folder().then((d) => $("saveDir").textContent = d);
 $("clearHist").onclick = () => confirmSheet("Clear the history?", "Totals reset too. Received files stay where they are.", "Clear history",

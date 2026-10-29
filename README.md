@@ -53,8 +53,8 @@ To update by hand, run the installer or the PowerShell line again; both install 
 ## Get started
 
 1. **Let the phone in.** Windows Firewall blocks incoming connections by default. Tick *Let phones on my home
-   network reach DropTray* in the installer, or run the script with `-Firewall`. That opens TCP 8765 and UDP 5353,
-   on private networks only.
+   network reach DropTray* in the installer, or run the script with `-Firewall`. That lets DropTray.exe receive on
+   whichever port it uses, plus Bonjour (UDP 5353), on private networks only.
 2. **Pair your iPhone.** Click the tray icon, then **Show pairing QR**, and scan it with the iPhone camera. Safari
    opens DropTray's page and pairs.
 3. **Add it to the Home Screen.** In Safari: Share → Add to Home Screen. The icon points at `droptray.local`, so it
@@ -153,6 +153,7 @@ through, frosted. Choose *Clear* for more see-through, or *Mica* for a calmer wa
 
 A native SwiftUI app with a Share-sheet extension lives in [`ios/`](ios). It offers one-tap Paste (videos too),
 Bonjour discovery, QR pairing and Liquid Glass. Build it yourself with Xcode: see [ios/README.md](ios/README.md).
+What the app and the PC promise each other is in [ios/CONTRACT.md](ios/CONTRACT.md).
 
 ## Privacy and security
 
@@ -161,7 +162,13 @@ Bonjour discovery, QR pairing and Liquid Glass. Build it yourself with Xcode: se
   any phone at any time.
 - **You decide.** Every incoming batch asks first, unless you turn that off.
 - **Clipboard sharing is off by default.** A paired phone sees the PC clipboard only after you allow it.
-- **Firewall.** The optional rules open DropTray's ports on private networks only, never on public Wi-Fi.
+- **Firewall.** The optional rules let DropTray in on private networks only, never on public Wi-Fi.
+
+### The port
+
+DropTray listens on TCP **47820**. If another app already uses it, DropTray picks a free port by itself (and
+tells you), then keeps it. Settings → **Port** shows it: type another one, or press **Auto**. The iPhone app
+follows the change through Bonjour. A Safari Home Screen icon holds the old port, so scan the QR code again.
 - **Encryption.** The iPhone app uses HTTPS, pinned to the PC's own certificate (no warnings, nothing to install).
   The browser page uses plain HTTP: on shared or work Wi-Fi, prefer the app.
 

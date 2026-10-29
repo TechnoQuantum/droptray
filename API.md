@@ -1,29 +1,37 @@
 # DropTray API (version 1)
 
 Everything the phone page does goes through this API, so a native iOS app can do the same.
-Plain HTTP/1.1 with JSON, on TCP 8765 of the PC.
+Plain HTTP/1.1 with JSON, on one TCP port of the PC.
+
+## The port
+
+DropTray listens on **47820** by default (8765 up to version 1.0.3). If another app holds the port when
+DropTray starts, it takes the next free one from 47821 to 47840, or else any port Windows gives it, and keeps
+that port from then on. The user can also set one in Settings → Port, or press Auto. So never assume a port:
+take it from Bonjour (the SRV record) or from the QR code, remember where the PC answered last, and look again
+with Bonjour when that stops working. `droptray.local:47820` is only a guess.
 
 ## Finding the PC
 
 - **Bonjour:** browse `_droptray._tcp`. TXT record: `id` (stable PC id), `name`, `api` (this version), `path`.
   The PC also answers for the host name `droptray.local`.
-- **Fallback:** the IP and port in the QR code (`http://<ip>:8765/?pair=<code>`).
+- **Fallback:** the IP and port in the QR code (`http://<ip>:<port>/?pair=<code>`).
 
 `GET /hello` (no auth) identifies the PC; use `id` to pick the stored key when several PCs are paired:
 
 ```json
-{"app": "DropTray", "version": "1.0.2", "api": 1, "features": ["pair", "offer", ..., "tls"], "id": "e676720b0973",
+{"app": "DropTray", "version": "1.0.4", "api": 1, "features": ["pair", "offer", ..., "tls"], "id": "e676720b0973",
  "name": "Prometheus", "mdns": true, "tls": true, "fp": "7a57b795…"}
 ```
 
 ## Encryption (HTTPS on the same port)
 
-Port 8765 speaks both plain HTTP and HTTPS: a connection that opens with a TLS handshake is encrypted, anything
+The port speaks both plain HTTP and HTTPS: a connection that opens with a TLS handshake is encrypted, anything
 else is plain HTTP. Browsers use HTTP; apps should use HTTPS.
 
 The PC has its own self-signed certificate (EC P-256, valid 10 years, kept in `%APPDATA%\DropTray\tls`). Its
 SHA-256 fingerprint (of the DER certificate, lowercase hex) is published three ways:
-- in the pairing QR code: `http://<ip>:8765/?pair=<code>&fp=<fingerprint>`, the trustworthy way;
+- in the pairing QR code: `http://<ip>:<port>/?pair=<code>&fp=<fingerprint>`, the trustworthy way;
 - in `/hello` as `"tls": true, "fp": "<fingerprint>"`;
 - as the certificate itself, during the TLS handshake.
 

@@ -3,7 +3,7 @@ import Foundation
 /// Talks to DropTray on one PC over the local network. Every call is described in API.md.
 /// With a pinned fingerprint it uses HTTPS and accepts only that PC's certificate; without, plain HTTP.
 struct DTClient {
-    let host: String                    // "192.168.1.20:8765" or "droptray.local:8765"
+    let host: String                    // "192.168.1.20:47820" or "droptray.local:47820"
     var key: String = ""
     var device: String = DTStore.deviceName
     var fp: String? = nil
@@ -142,7 +142,8 @@ struct DTClient {
 enum DTLocator {
     static func find(_ pc: PairedPC, hints: [String] = []) async -> String? {
         var seen = Set<String>()
-        let hosts = ([pc.lastHost, "droptray.local:8765"] + hints).filter { !$0.isEmpty && seen.insert($0).inserted }
+        let guesses = [DTPort.standard, DTPort.legacy].map { "droptray.local:\($0)" }
+        let hosts = ([pc.lastHost] + hints + guesses).filter { !$0.isEmpty && seen.insert($0).inserted }
         return await withTaskGroup(of: String?.self) { group in
             for host in hosts {
                 group.addTask {

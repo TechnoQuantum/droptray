@@ -35,7 +35,7 @@ except ImportError:          # HEIC thumbnails and conversion just won't happen
     pillow_heif = None
 
 APP = "DropTray"
-APP_VERSION = "1.0.3"          # the one place the version lives; release.ps1 and the installer read it
+APP_VERSION = "1.0.4"          # the one place the version lives; release.ps1 and the installer read it
 REPO = "TechnoQuantum/droptray"
 AUMID = "DropTray.Receiver"
 HERE = Path(__file__).resolve().parent
@@ -49,6 +49,7 @@ MAX_SPEEDTEST = 256 * 1024 * 1024
 MAX_TEXT = 100_000
 HISTORY_KEEP = 500
 MDNS_HOST = "droptray.local"
+DEFAULT_PORT = 47820           # 8765 clashed with other apps; a taken port falls back by itself (see open_server)
 API_VERSION = 1                # bump when an endpoint changes incompatibly; see API.md
 FEATURES = ["pair", "offer", "upload", "cancel", "text", "shared", "clipboard", "speedtest", "tls"]
 
@@ -215,14 +216,16 @@ def make_icon(size: int = 64, state: str = "idle") -> Image.Image:
 class Store:
     SETTINGS = ("port", "token", "save_dir", "auto_accept", "auto_copy", "convert_heic", "clip_sync",
                 "pc_id", "pc_name", "devices", "blocks", "keep_open", "widget", "widget_pos", "drawer_at", "glass",
-                "auto_update", "last_version")
+                "auto_update", "last_version", "port_pinned")
     # When each Activity block shows: always, busy (while receiving), idle, or off.
     BLOCK_DEFAULTS = {"throughput": "busy", "totals": "always", "recent": "always", "connection": "off"}
 
     def __init__(self):
         self.conf_file = CONF_DIR / "config.json"
         self.hist_file = CONF_DIR / "history.json"
-        self.port = 8765
+        self.port = DEFAULT_PORT
+        self.port_pinned = False             # True once chosen in Settings; otherwise DropTray picks it
+        self.port_from = 0                   # the old default port this start moved away from, if any
         self.token = secrets.token_hex(3).upper()     # six characters: easy to type on a phone
         self.save_dir = str(Path.home() / "Downloads" / APP)
         self.auto_accept = False
@@ -255,6 +258,8 @@ class Store:
                 if k in data:
                     setattr(self, k, data[k])
             self.blocks = {**self.BLOCK_DEFAULTS, **(self.blocks if isinstance(self.blocks, dict) else {})}
+            if self.port == 8765 and not self.port_pinned:   # the old default: move off the crowded 87xx range
+                self.port, self.port_from = DEFAULT_PORT, 8765
         except (OSError, ValueError):
             pass
         try:
@@ -1159,6 +1164,53 @@ class Server(ThreadingHTTPServer):
             log.exception("request from %s failed", client_address[0])
 
 
+def port_free_v6(port: int) -> bool:
+    """Our listener is IPv4, but an app holding [::]:port would still answer 'localhost' and confuse things."""
+    try:
+        s = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
+    except OSError:
+        return True
+    try:
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        s.bind(("::", port))
+        return True
+    except OSError:
+        return False
+    finally:
+        s.close()
+
+
+def try_server(app, port: int) -> "Server | None":
+    if port and not port_free_v6(port):
+        return None
+    try:
+        return Server(("0.0.0.0", port), make_handler(app))
+    except OSError as e:
+        log.info("port %s unavailable: %s", port, e)
+        return None
+
+
+def open_server(app) -> Server:
+    """Listen on the saved port. If another app has it, take DEFAULT_PORT or one just above it, and as a last
+    resort any port Windows offers. The port that worked is saved, so it stays the same from then on."""
+    st = app.store
+    wanted = int(st.port or DEFAULT_PORT)
+    for port in dict.fromkeys([wanted, DEFAULT_PORT, *range(DEFAULT_PORT + 1, DEFAULT_PORT + 21), 0]):
+        server = try_server(app, port)
+        if server is None:
+            continue
+        port = server.server_address[1]
+        if port != wanted:
+            log.warning("port %s is taken by another app; using %s", wanted, port)
+            app.port_moved = (wanted, port)
+            st.port_pinned = False
+        if port != st.port:
+            st.port = port
+            st.save_conf()
+        return server
+    raise OSError("no free TCP port")
+
+
 # ---------------------------------------------------------------- the app
 
 class App:
@@ -1186,10 +1238,11 @@ class App:
         self.zc = None
         self.mdns_info = None
         self.mdns_ok = False
+        self.port_moved: tuple | None = None   # (taken, now) when the saved port was busy at start
         self.icon_png = CONF_DIR / "icon.png"
         make_icon(256).save(self.icon_png)
         self.notifier = Notifier(self.icon_png)
-        self.server = Server(("0.0.0.0", int(self.store.port)), make_handler(self))
+        self.server = open_server(self)
         self.server.tls, self.tls_fp = load_tls()
 
     @property
@@ -1207,6 +1260,13 @@ class App:
 
     def start(self):
         threading.Thread(target=self.server.serve_forever, daemon=True).start()
+        if self.port_moved or self.store.port_from:
+            taken, now = self.port_moved or (self.store.port_from, self.store.port)
+            why = f"Port {taken} is used by another app." if self.port_moved else f"Port {taken} clashed with other apps."
+            lines = [why, "The iPhone app follows by itself; scan the QR again in Safari.",
+                     "If the phone can't connect, run setup-firewall.ps1 in DropTray's folder."]
+            self.store.add_event("port", f"Now receiving on port {now}", " ".join(lines))
+            self.notifier.info(f"{APP} moved to port {now}", lines[:2])
         threading.Thread(target=self._probe_link, daemon=True).start()
         threading.Thread(target=self._announce, daemon=True).start()
 
@@ -1244,6 +1304,34 @@ class App:
         threading.Thread(target=self._probe_link, daemon=True).start()
         threading.Thread(target=self._announce, daemon=True).start()
         return True
+
+    def change_port(self, port: int) -> str:
+        """Moves the receiver to another port at once (0: any free one). Binds the new one first, so a taken
+        port changes nothing."""
+        if port and port == int(self.store.port):
+            self.store.port_pinned = True
+            self.store.save_conf()
+            return ""
+        server = None
+        if port:
+            server = try_server(self, port)
+        else:
+            for p in [DEFAULT_PORT, *range(DEFAULT_PORT + 1, DEFAULT_PORT + 21), 0]:
+                if p != int(self.store.port) and (server := try_server(self, p)) is not None:
+                    break
+        if server is None:
+            return f"Port {port} is in use by another app." if port else "No free port found."
+        server.tls = self.server.tls
+        old, self.server = self.server, server
+        self.store.port = server.server_address[1]
+        self.store.port_pinned = bool(port)
+        self.store.save_conf()
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        threading.Thread(target=self._announce, daemon=True).start()   # phones find the new port by Bonjour
+        old.shutdown()
+        old.server_close()
+        log.info("receiver moved to port %s", self.store.port)
+        return ""
 
     def shutdown(self):
         try:

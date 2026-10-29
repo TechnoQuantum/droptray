@@ -8,7 +8,7 @@ final class Discovery {
     struct Found: Identifiable, Hashable {
         let id: String          // the PC's id from the TXT record
         let name: String
-        var host: String?       // "192.168.1.20:8765" once resolved
+        var host: String?       // "192.168.1.20:47820" once resolved
     }
 
     private(set) var found: [Found] = []

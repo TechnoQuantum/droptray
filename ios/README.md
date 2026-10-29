@@ -2,6 +2,7 @@
 
 A native SwiftUI app for DropTray, plus a Share extension that puts **DropTray** next to AirDrop in the Share sheet.
 It uses the same HTTP API as the web page ([API.md](../API.md)), so the PC side needs no changes.
+How the app must use it (finding the PC, pinning, pairing, errors) is in [CONTRACT.md](CONTRACT.md).
 
 > **Status: first draft, not yet compiled.** It was written on Windows without Xcode. Expect a few compile
 > errors on the first build. Paste them into an issue or a chat and they'll get fixed.

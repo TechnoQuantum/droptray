@@ -6,7 +6,15 @@ notification, unless "Ask before receiving" is off.
 """
 import ctypes
 
-from core import APP, AUMID, App, log
+from core import APP, AUMID, CONF_DIR, DEFAULT_PORT, App, log
+
+
+def saved_port() -> int:
+    import json
+    try:
+        return int(json.loads((CONF_DIR / "config.json").read_text("utf-8")).get("port", DEFAULT_PORT))
+    except (OSError, ValueError, TypeError):
+        return DEFAULT_PORT
 
 
 def already_running() -> bool:
@@ -14,7 +22,7 @@ def already_running() -> bool:
     import json
     import urllib.request
     try:
-        with urllib.request.urlopen("http://127.0.0.1:8765/local/show", timeout=1.5) as r:
+        with urllib.request.urlopen(f"http://127.0.0.1:{saved_port()}/local/show", timeout=1.5) as r:
             return json.load(r).get("app") == APP
     except Exception:
         return False
@@ -33,7 +41,7 @@ def main():
     except OSError as e:
         log.error("could not start: %s", e)
         ctypes.windll.user32.MessageBoxW(
-            None, f"Could not start the receiver on port 8765.\nIs DropTray already running?\n\n{e}", APP, 0x10)
+            None, f"Could not start the receiver: no free network port.\n\n{e}", APP, 0x10)
         return
     from ui import Drawer
     app.start()

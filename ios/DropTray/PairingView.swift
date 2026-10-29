@@ -80,7 +80,7 @@ struct PairingView: View {
                             .padding(12)
                             .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                         Button("Next") {
-                            let host = address.contains(":") ? address : address + ":8765"
+                            let host = address.contains(":") ? address : address + ":\(DTPort.standard)"
                             target = Target(host: host.trimmingCharacters(in: .whitespaces), name: address)
                         }
                         .secondaryButton()
@@ -133,13 +133,13 @@ struct PairingView: View {
         .padding(.vertical, 24)
     }
 
-    /// The PC's QR code holds http://<ip>:8765/?pair=<code>: pair at once with that code.
+    /// The PC's QR code holds http://<ip>:<port>/?pair=<code>: pair at once with that code.
     private func handleScan(_ text: String) {
         guard let url = URL(string: text), let h = url.host else {
             error = "That isn't a DropTray pairing code."
             return
         }
-        let host = "\(h):\(url.port ?? 8765)"
+        let host = "\(h):\(url.port ?? DTPort.standard)"
         let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
         let code = items.first { $0.name == "pair" || $0.name == "t" }?.value ?? ""
         let fp = items.first { $0.name == "fp" }?.value

@@ -85,11 +85,14 @@ if (Get-ItemProperty $run -Name DropTray -ErrorAction SilentlyContinue) {
 }
 
 if ($Firewall) {
-    # Lets phones on private networks reach DropTray (TCP 8765, UDP 5353). Asks for administrator.
-    $rules = @'
-New-NetFirewallRule -DisplayName 'DropTray (TCP 8765)' -Direction Inbound -Protocol TCP -LocalPort 8765 -Profile Private -Action Allow | Out-Null
+    # Lets phones on private networks reach DropTray.exe (on whichever TCP port it picks) and Bonjour (UDP 5353).
+    # Asks for administrator.
+    $exe = (Join-Path $dest 'DropTray.exe').Replace("'", "''")
+    $rules = @"
+Get-NetFirewallRule -DisplayName 'DropTray*' -ErrorAction SilentlyContinue | Remove-NetFirewallRule
+New-NetFirewallRule -DisplayName 'DropTray (TCP, any port)' -Direction Inbound -Protocol TCP -Program '$exe' -Profile Private -Action Allow | Out-Null
 New-NetFirewallRule -DisplayName 'DropTray Bonjour (UDP 5353)' -Direction Inbound -Protocol UDP -LocalPort 5353 -Profile Private -Action Allow | Out-Null
-'@
+"@
     Start-Process powershell -Verb RunAs -Wait -ArgumentList '-NoProfile', '-Command', $rules
 }
 

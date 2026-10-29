@@ -28,6 +28,7 @@ if ($Publish) {
 Write-Host 'Tests'
 & $py tests\test_multipart.py; if ($LASTEXITCODE) { throw 'tests failed' }
 & $py tests\test_store.py; if ($LASTEXITCODE) { throw 'tests failed' }
+& $py tests\test_port.py; if ($LASTEXITCODE) { throw 'tests failed' }
 
 Write-Host 'App (PyInstaller)'
 & $py -m PyInstaller DropTray.spec --noconfirm --log-level WARN; if ($LASTEXITCODE) { throw 'PyInstaller failed' }
